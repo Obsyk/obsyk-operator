@@ -1,0 +1,45 @@
+Thank you for installing {{ .Chart.Name }}!
+
+{{- if .Values.agent.enabled }}
+
+Your Obsyk agent has been configured with:
+  - Cluster Name: {{ .Values.agent.clusterName }}
+  - Platform URL: {{ .Values.agent.platformURL }}
+
+IMPORTANT: Make sure you have created the API key secret:
+
+  kubectl create secret generic {{ .Values.agent.apiKeySecretRef.name }} \
+    --namespace {{ .Release.Namespace }} \
+    --from-literal={{ .Values.agent.apiKeySecretRef.key }}=YOUR_API_KEY
+
+To check the agent status:
+
+  kubectl get obsykagent -n {{ .Release.Namespace }}
+
+To view operator logs:
+
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/name={{ include "obsyk-operator.name" . }}
+
+{{- else }}
+
+The operator is installed but no ObsykAgent has been created.
+
+To create an agent manually:
+
+  cat <<EOF | kubectl apply -f -
+  apiVersion: obsyk.io/v1
+  kind: ObsykAgent
+  metadata:
+    name: obsyk-agent
+    namespace: {{ .Release.Namespace }}
+  spec:
+    platformURL: "https://api.obsyk.com"
+    clusterName: "your-cluster-name"
+    apiKeySecretRef:
+      name: obsyk-api-key
+      key: token
+  EOF
+
+{{- end }}
+
+For more information, visit: https://docs.obsyk.com
