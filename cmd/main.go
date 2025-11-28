@@ -13,6 +13,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	obsykv1 "github.com/obsyk/obsyk-operator/api/v1"
 )
 
 var (
@@ -22,8 +24,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	// Add custom API types here when implemented
-	// utilruntime.Must(obsykv1.AddToScheme(scheme))
+	utilruntime.Must(obsykv1.AddToScheme(scheme))
 }
 
 func main() {
