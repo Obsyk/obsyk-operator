@@ -1,0 +1,78 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "obsyk-operator.fullname" . }}
+  labels:
+    {{- include "obsyk-operator.labels" . | nindent 4 }}
+rules:
+  # ObsykAgent management
+  - apiGroups:
+      - obsyk.io
+    resources:
+      - obsykagents
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - obsyk.io
+    resources:
+      - obsykagents/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - obsyk.io
+    resources:
+      - obsykagents/finalizers
+    verbs:
+      - update
+  # Read-only access to cluster resources
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - list
+      - watch
+  # Secret access for API key
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  # Leader election
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
