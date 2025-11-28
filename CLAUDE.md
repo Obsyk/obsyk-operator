@@ -10,9 +10,9 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 
 ## Tech Stack
 
-- **Language**: Go 1.22+
+- **Language**: Go 1.23+
 - **Framework**: Kubebuilder v4 (controller-runtime)
-- **Build**: Make, Docker
+- **Build**: Earthly (containerized builds)
 - **Installation**: Helm chart
 - **CI/CD**: GitHub Actions
 - **Container Registry**: GHCR (ghcr.io/obsyk/obsyk-operator)
@@ -47,8 +47,8 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
   /workflows/
     ci.yml                   # PR checks
     release.yml              # Release automation
-/Makefile                    # Build commands
-/Dockerfile                  # Multi-stage build
+/Earthfile                   # Earthly build definitions
+/Dockerfile                  # Runtime image (used by Earthly)
 ```
 
 ## Architecture
@@ -107,43 +107,34 @@ status:
 ## Build Commands
 
 ```bash
-# Install dependencies
-make deps
+# Run all CI checks (lint, test, build)
+earthly +ci
 
-# Generate CRD manifests and code
-make generate
-make manifests
+# Run linters only
+earthly +lint
 
-# Run linters
-make lint
+# Run tests only
+earthly +test
 
-# Run tests
-make test
-
-# Build binary
-make build
+# Build binary only
+earthly +build
 
 # Build Docker image
-make docker-build IMG=ghcr.io/obsyk/obsyk-operator:dev
+earthly +docker
 
-# Push Docker image
-make docker-push IMG=ghcr.io/obsyk/obsyk-operator:dev
+# Build and push Docker image
+earthly --push +docker --VERSION=v1.0.0
 
-# Install CRDs in cluster
-make install
-
-# Deploy operator to cluster
-make deploy IMG=ghcr.io/obsyk/obsyk-operator:dev
-
-# Uninstall from cluster
-make uninstall
+# Generate CRD manifests (when implemented)
+earthly +manifests
 ```
 
 ## Local Development
 
 ### Prerequisites
-- Go 1.22+
-- Docker
+- Go 1.23+
+- Earthly
+- Docker (OrbStack recommended for Mac)
 - kubectl configured to a test cluster
 - Kind or Minikube for local testing
 
@@ -153,11 +144,11 @@ make uninstall
 # Start a local cluster
 kind create cluster --name obsyk-dev
 
-# Install CRDs
-make install
+# Build and run tests
+earthly +ci
 
 # Run controller locally (outside cluster)
-make run
+go run ./cmd/main.go
 
 # In another terminal, create test resources
 kubectl apply -f config/samples/
@@ -166,13 +157,10 @@ kubectl apply -f config/samples/
 ### Testing
 
 ```bash
-# Unit tests with envtest
-make test
+# Unit tests
+earthly +test
 
-# Generate coverage report
-make test-coverage
-
-# Run specific test
+# Run specific test locally
 go test ./internal/controller/... -v -run TestObsykAgentReconcile
 ```
 
@@ -239,14 +227,12 @@ GitHub Issues for bug/feature management.
 ## CI/CD Pipeline
 
 ### PR Checks (ci.yml)
-- Go: gofmt, go vet, golangci-lint
-- Tests: Unit tests with envtest
-- Build: Verify Docker image builds
+- Earthly `+ci` target runs: gofmt, go vet, golangci-lint, tests, build
+- Helm chart linting (when chart exists)
 
 ### Release (release.yml) - on tag push
-- Build multi-arch Docker image (amd64, arm64)
+- Earthly builds and pushes Docker image to GHCR
 - Security scan with Trivy
-- Push to GHCR with version tags
 - Package and publish Helm chart to GitHub Pages
 
 ## Git Workflow
