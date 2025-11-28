@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	obsykv1 "github.com/obsyk/obsyk-operator/api/v1"
+	"github.com/obsyk/obsyk-operator/internal/controller"
 )
 
 var (
@@ -57,14 +58,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Register controllers here when implemented
-	// if err = (&controller.ObsykAgentReconciler{
-	// 	Client: mgr.GetClient(),
-	// 	Scheme: mgr.GetScheme(),
-	// }).SetupWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create controller", "controller", "ObsykAgent")
-	// 	os.Exit(1)
-	// }
+	// Register ObsykAgent controller
+	if err = controller.NewObsykAgentReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ObsykAgent")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
