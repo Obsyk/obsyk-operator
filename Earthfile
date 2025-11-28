@@ -19,6 +19,31 @@ deps:
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
+# Install controller-gen
+controller-gen:
+    FROM +go-base
+    ARG CONTROLLER_GEN_VERSION=v0.14.0
+    RUN go install sigs.k8s.io/controller-tools/cmd/controller-gen@${CONTROLLER_GEN_VERSION}
+    SAVE ARTIFACT /go/bin/controller-gen
+
+# Generate DeepCopy methods
+generate:
+    FROM +deps
+    COPY +controller-gen/controller-gen /usr/local/bin/
+    COPY --dir api ./
+    RUN controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."  2>/dev/null || \
+        controller-gen object paths="./..."
+    SAVE ARTIFACT api AS LOCAL api
+
+# Generate CRD manifests
+manifests:
+    FROM +deps
+    COPY +controller-gen/controller-gen /usr/local/bin/
+    COPY --dir api ./
+    RUN mkdir -p config/crd/bases
+    RUN controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+    SAVE ARTIFACT config/crd AS LOCAL config/crd
+
 # Lint the code
 lint:
     FROM +deps
@@ -57,11 +82,6 @@ docker:
     ENTRYPOINT ["/manager"]
     ARG VERSION=latest
     SAVE IMAGE --push ghcr.io/obsyk/obsyk-operator:${VERSION}
-
-# Generate CRD manifests (placeholder - will be implemented with controller-gen)
-manifests:
-    FROM +deps
-    RUN echo "Manifests generation will be added when CRDs are implemented"
 
 # All CI checks
 ci:
