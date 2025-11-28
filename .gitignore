@@ -1,5 +1,6 @@
-# Binaries
+# Binaries and build output
 bin/
+manager
 *.exe
 *.exe~
 *.dll
