@@ -1,0 +1,46 @@
+# Copyright (c) Obsyk. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.0
+
+      - name: Run CI checks
+        run: earthly +ci
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Lint Helm chart
+        run: |
+          if [ -d "charts/obsyk-operator" ]; then
+            helm lint charts/obsyk-operator
+          else
+            echo "Helm chart not yet created, skipping lint"
+          fi
