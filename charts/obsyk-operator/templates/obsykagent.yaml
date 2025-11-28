@@ -1,0 +1,18 @@
+{{- if .Values.agent.enabled }}
+{{- if not .Values.agent.clusterName }}
+{{- fail "agent.clusterName is required when agent.enabled is true" }}
+{{- end }}
+apiVersion: obsyk.io/v1
+kind: ObsykAgent
+metadata:
+  name: {{ include "obsyk-operator.fullname" . }}-agent
+  labels:
+    {{- include "obsyk-operator.labels" . | nindent 4 }}
+spec:
+  platformURL: {{ .Values.agent.platformURL | quote }}
+  clusterName: {{ .Values.agent.clusterName | quote }}
+  apiKeySecretRef:
+    name: {{ .Values.agent.apiKeySecretRef.name | quote }}
+    key: {{ .Values.agent.apiKeySecretRef.key | quote }}
+  syncInterval: {{ .Values.agent.syncInterval | quote }}
+{{- end }}
