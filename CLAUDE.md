@@ -28,6 +28,9 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 /cmd/
   /main.go                   # Operator entrypoint
 /internal/
+  /auth/
+    token.go                 # OAuth2 JWT Bearer authentication
+    token_test.go            # Auth tests
   /controller/
     obsykagent_controller.go # Main reconciliation logic
     suite_test.go            # Controller tests
@@ -70,17 +73,35 @@ spec:
   # Logical cluster identifier
   clusterName: "production-us-east-1"
 
-  # API key stored in Secret (NEVER plain-text)
+  # OAuth2 credentials stored in Secret (NEVER plain-text)
   apiKeySecretRef:
-    name: obsyk-api-key
-    key: token
+    name: obsyk-credentials
 status:
+  clusterUID: "abc123-def456"  # Auto-detected from kube-system namespace
   conditions:
     - type: Available
       status: "True"
     - type: Syncing
       status: "True"
   lastSyncTime: "2024-01-15T10:30:00Z"
+  lastSnapshotTime: "2024-01-15T10:25:00Z"
+  resourceCounts:
+    namespaces: 10
+    pods: 100
+    services: 20
+```
+
+**Required Secret Format:**
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: obsyk-credentials
+  namespace: obsyk-system
+type: Opaque
+data:
+  client_id: <base64-encoded OAuth2 client ID>
+  private_key: <base64-encoded PEM ECDSA P-256 private key>
 ```
 
 ### Controller Logic
@@ -101,7 +122,9 @@ status:
 ### Security Requirements
 
 - **RBAC**: Read-only access only (list, watch) for Pods, Services, Namespaces
-- **API Key**: Must be read from Secret at runtime, NEVER logged or exposed
+- **Credentials**: OAuth2 credentials (client_id, private_key) read from Secret at runtime
+- **Private Key**: NEVER logged or exposed, stored only in Kubernetes Secret
+- **Token Management**: Access tokens cached in memory, refreshed before expiry
 - **Error Handling**: Exponential backoff for 5xx errors from platform
 
 ## Build Commands
@@ -203,17 +226,18 @@ func (r *ObsykAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // Don't do this - let controller-runtime manage the informer lifecycle
 ```
 
-**Read secrets at runtime:**
+**Read credentials at runtime:**
 ```go
-// GOOD - Read secret in reconcile loop
+// GOOD - Read credentials from secret and use token manager
 secret := &corev1.Secret{}
 if err := r.Get(ctx, secretRef, secret); err != nil {
     return ctrl.Result{}, err
 }
-apiKey := string(secret.Data[agent.Spec.APIKeySecretRef.Key])
+creds, err := auth.ParseCredentials(secret.Data)
+tokenManager := auth.NewTokenManager(platformURL, creds, httpClient, logger)
 
-// BAD - Store API key in memory or log it
-log.Info("Using API key", "key", apiKey) // NEVER DO THIS
+// BAD - Store private key in memory or log it
+log.Info("Using private key", "key", privateKey) // NEVER DO THIS
 ```
 
 ## Issue Tracking
@@ -268,17 +292,22 @@ Examples:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/agents/snapshot` | Full cluster state on startup |
-| POST | `/api/v1/agents/events` | Individual resource changes |
-| POST | `/api/v1/agents/heartbeat` | Periodic health check |
+| POST | `/oauth/token` | Exchange JWT assertion for access token |
+| POST | `/api/v1/agent/snapshot` | Full cluster state on startup |
+| POST | `/api/v1/agent/events` | Individual resource changes |
+| POST | `/api/v1/agent/heartbeat` | Periodic health check |
 
 ### Payload Formats
 
 **Snapshot Payload:**
 ```json
 {
-  "clusterName": "production-us-east-1",
-  "timestamp": "2024-01-15T10:30:00Z",
+  "cluster_uid": "abc123-def456",
+  "cluster_name": "production-us-east-1",
+  "kubernetes_version": "1.28.0",
+  "platform": "eks",
+  "region": "us-east-1",
+  "agent_version": "0.1.0",
   "namespaces": [...],
   "pods": [...],
   "services": [...]
@@ -288,19 +317,63 @@ Examples:
 **Event Payload:**
 ```json
 {
-  "clusterName": "production-us-east-1",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "eventType": "ADDED|UPDATED|DELETED",
-  "resourceType": "Pod|Service|Namespace",
-  "resource": {...}
+  "cluster_uid": "abc123-def456",
+  "events": [
+    {"type": "added", "kind": "Pod", "uid": "...", "name": "...", "namespace": "...", "object": {...}}
+  ]
 }
 ```
 
-### Authentication
-- Header: `Authorization: Bearer <api-key>`
-- API key sourced from Kubernetes Secret at runtime
+**Heartbeat Payload:**
+```json
+{
+  "cluster_uid": "abc123-def456",
+  "agent_version": "0.1.0"
+}
+```
+
+### Authentication (OAuth2 JWT Bearer)
+
+The operator uses OAuth2 JWT Bearer Assertion (RFC 7523) for authentication:
+
+1. **Setup**: Customer generates ECDSA P-256 key pair locally
+2. **Registration**: Customer uploads public key to platform, receives `client_id`
+3. **Authentication Flow**:
+   - Operator creates JWT assertion signed with private key
+   - Operator exchanges assertion for access token via `/oauth/token`
+   - Access token is used for all API calls (expires in 1 hour)
+   - Token is automatically refreshed before expiry
+
+**JWT Assertion Claims:**
+```json
+{
+  "iss": "<client_id>",
+  "sub": "<client_id>",
+  "aud": ["https://api.obsyk.com"],
+  "iat": 1705312200,
+  "exp": 1705312500,
+  "jti": "<unique-id>"
+}
+```
+
+**Token Request:**
+```bash
+curl -X POST https://api.obsyk.com/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
+  -d "assertion=<signed-jwt>"
+```
+
+**API Request:**
+```bash
+curl -X POST https://api.obsyk.com/api/v1/agent/snapshot \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"cluster_uid": "...", ...}'
+```
 
 ### Error Handling
 - 2xx: Success
+- 401: Authentication error (refresh token and retry once)
 - 4xx: Client error (log and don't retry)
 - 5xx: Server error (exponential backoff with jitter)
