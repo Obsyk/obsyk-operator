@@ -260,12 +260,12 @@ func (r *ObsykAgentReconciler) sendSnapshot(ctx context.Context, agent *obsykv1.
 
 	// Build snapshot payload
 	payload := &transport.SnapshotPayload{
-		ClusterName: agent.Spec.ClusterName,
-		ClusterUID:  agent.Status.ClusterUID,
-		Timestamp:   time.Now(),
-		Namespaces:  make([]transport.NamespaceInfo, 0, len(namespaces.Items)),
-		Pods:        make([]transport.PodInfo, 0, len(pods.Items)),
-		Services:    make([]transport.ServiceInfo, 0, len(services.Items)),
+		ClusterUID:   agent.Status.ClusterUID,
+		ClusterName:  agent.Spec.ClusterName,
+		AgentVersion: "0.1.0", // TODO: get from build info
+		Namespaces:   make([]transport.NamespaceInfo, 0, len(namespaces.Items)),
+		Pods:         make([]transport.PodInfo, 0, len(pods.Items)),
+		Services:     make([]transport.ServiceInfo, 0, len(services.Items)),
 	}
 
 	for i := range namespaces.Items {
@@ -290,28 +290,13 @@ func (r *ObsykAgentReconciler) sendSnapshot(ctx context.Context, agent *obsykv1.
 func (r *ObsykAgentReconciler) sendHeartbeat(ctx context.Context, agent *obsykv1.ObsykAgent, client *transport.Client) error {
 	logger := log.FromContext(ctx)
 
-	// Get current resource counts
-	counts, err := r.getResourceCounts(ctx)
-	if err != nil {
-		return fmt.Errorf("getting resource counts: %w", err)
-	}
-
 	payload := &transport.HeartbeatPayload{
-		ClusterName: agent.Spec.ClusterName,
-		ClusterUID:  agent.Status.ClusterUID,
-		Timestamp:   time.Now(),
-		ResourceCounts: transport.ResourceCounts{
-			Namespaces: counts.Namespaces,
-			Pods:       counts.Pods,
-			Services:   counts.Services,
-		},
-		Version: "0.1.0", // TODO: get from build info
+		ClusterUID:   agent.Status.ClusterUID,
+		AgentVersion: "0.1.0", // TODO: get from build info
 	}
 
 	logger.V(1).Info("sending heartbeat",
-		"namespaces", counts.Namespaces,
-		"pods", counts.Pods,
-		"services", counts.Services)
+		"clusterUID", agent.Status.ClusterUID)
 
 	return client.SendHeartbeat(ctx, payload)
 }
