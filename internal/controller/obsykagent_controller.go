@@ -115,6 +115,16 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		now := metav1.Now()
 		agent.Status.LastSnapshotTime = &now
 		agent.Status.LastSyncTime = &now
+	} else {
+		// Send periodic heartbeat
+		if err := r.sendHeartbeat(ctx, agent, ac.transport); err != nil {
+			logger.Error(err, "failed to send heartbeat")
+			r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
+				"HeartbeatFailed", err.Error())
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
+		}
+		now := metav1.Now()
+		agent.Status.LastSyncTime = &now
 	}
 
 	// Update resource counts
@@ -274,6 +284,36 @@ func (r *ObsykAgentReconciler) sendSnapshot(ctx context.Context, agent *obsykv1.
 		"services", len(payload.Services))
 
 	return client.SendSnapshot(ctx, payload)
+}
+
+// sendHeartbeat sends a periodic health check to the platform.
+func (r *ObsykAgentReconciler) sendHeartbeat(ctx context.Context, agent *obsykv1.ObsykAgent, client *transport.Client) error {
+	logger := log.FromContext(ctx)
+
+	// Get current resource counts
+	counts, err := r.getResourceCounts(ctx)
+	if err != nil {
+		return fmt.Errorf("getting resource counts: %w", err)
+	}
+
+	payload := &transport.HeartbeatPayload{
+		ClusterName: agent.Spec.ClusterName,
+		ClusterUID:  agent.Status.ClusterUID,
+		Timestamp:   time.Now(),
+		ResourceCounts: transport.ResourceCounts{
+			Namespaces: counts.Namespaces,
+			Pods:       counts.Pods,
+			Services:   counts.Services,
+		},
+		Version: "0.1.0", // TODO: get from build info
+	}
+
+	logger.V(1).Info("sending heartbeat",
+		"namespaces", counts.Namespaces,
+		"pods", counts.Pods,
+		"services", counts.Services)
+
+	return client.SendHeartbeat(ctx, payload)
 }
 
 // getResourceCounts returns counts of watched resources.
