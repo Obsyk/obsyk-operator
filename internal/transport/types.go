@@ -30,14 +30,23 @@ const (
 
 // SnapshotPayload represents a full cluster state snapshot.
 type SnapshotPayload struct {
-	// ClusterName is the human-friendly cluster identifier.
-	ClusterName string `json:"clusterName"`
-
 	// ClusterUID is the unique cluster identifier (kube-system namespace UID).
-	ClusterUID string `json:"clusterUID"`
+	ClusterUID string `json:"cluster_uid"`
 
-	// Timestamp when the snapshot was taken.
-	Timestamp time.Time `json:"timestamp"`
+	// ClusterName is the human-friendly cluster identifier.
+	ClusterName string `json:"cluster_name"`
+
+	// KubernetesVersion is the cluster's K8s version.
+	KubernetesVersion string `json:"kubernetes_version,omitempty"`
+
+	// Platform is the cluster platform (e.g., eks, gke, kind).
+	Platform string `json:"platform,omitempty"`
+
+	// Region is the cluster region.
+	Region string `json:"region,omitempty"`
+
+	// AgentVersion is the operator version.
+	AgentVersion string `json:"agent_version,omitempty"`
 
 	// Namespaces in the cluster.
 	Namespaces []NamespaceInfo `json:"namespaces"`
@@ -51,41 +60,35 @@ type SnapshotPayload struct {
 
 // EventPayload represents a single resource change event.
 type EventPayload struct {
-	// ClusterName is the human-friendly cluster identifier.
-	ClusterName string `json:"clusterName"`
-
 	// ClusterUID is the unique cluster identifier.
-	ClusterUID string `json:"clusterUID"`
+	ClusterUID string `json:"cluster_uid"`
 
-	// Timestamp when the event occurred.
-	Timestamp time.Time `json:"timestamp"`
+	// EventType indicates the type of change (added, modified, deleted).
+	Type string `json:"type"`
 
-	// EventType indicates the type of change (ADDED, UPDATED, DELETED).
-	EventType EventType `json:"eventType"`
+	// Kind indicates what kind of resource changed (Namespace, Pod, Service).
+	Kind string `json:"kind"`
 
-	// ResourceType indicates what kind of resource changed.
-	ResourceType ResourceType `json:"resourceType"`
+	// UID is the resource's unique identifier.
+	UID string `json:"uid"`
 
-	// Resource contains the resource data (one of Namespace, Pod, Service).
-	Resource interface{} `json:"resource"`
+	// Name is the resource name.
+	Name string `json:"name"`
+
+	// Namespace is the resource namespace (empty for cluster-scoped resources).
+	Namespace string `json:"namespace,omitempty"`
+
+	// Object contains the full resource data for add/update, nil for delete.
+	Object interface{} `json:"object,omitempty"`
 }
 
 // HeartbeatPayload represents a periodic health check.
 type HeartbeatPayload struct {
-	// ClusterName is the human-friendly cluster identifier.
-	ClusterName string `json:"clusterName"`
-
 	// ClusterUID is the unique cluster identifier.
-	ClusterUID string `json:"clusterUID"`
+	ClusterUID string `json:"cluster_uid"`
 
-	// Timestamp when the heartbeat was sent.
-	Timestamp time.Time `json:"timestamp"`
-
-	// ResourceCounts contains counts of watched resources.
-	ResourceCounts ResourceCounts `json:"resourceCounts"`
-
-	// Version of the operator.
-	Version string `json:"version,omitempty"`
+	// AgentVersion of the operator.
+	AgentVersion string `json:"agent_version,omitempty"`
 }
 
 // ResourceCounts holds counts of watched resources.
@@ -97,26 +100,26 @@ type ResourceCounts struct {
 
 // NamespaceInfo contains relevant namespace information.
 type NamespaceInfo struct {
-	Name              string            `json:"name"`
-	UID               string            `json:"uid"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Annotations       map[string]string `json:"annotations,omitempty"`
-	Phase             string            `json:"phase"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	Phase        string            `json:"phase,omitempty"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // PodInfo contains relevant pod information.
 type PodInfo struct {
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	UID               string            `json:"uid"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Annotations       map[string]string `json:"annotations,omitempty"`
-	Phase             string            `json:"phase"`
-	NodeName          string            `json:"nodeName,omitempty"`
-	ServiceAccount    string            `json:"serviceAccount,omitempty"`
-	Containers        []ContainerInfo   `json:"containers,omitempty"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
+	UID            string            `json:"uid"`
+	Name           string            `json:"name"`
+	Namespace      string            `json:"namespace"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Annotations    map[string]string `json:"annotations,omitempty"`
+	NodeName       string            `json:"node_name,omitempty"`
+	ServiceAccount string            `json:"service_account,omitempty"`
+	Containers     []ContainerInfo   `json:"containers,omitempty"`
+	Phase          string            `json:"phase,omitempty"`
+	K8sCreatedAt   *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // ContainerInfo contains relevant container information.
@@ -127,16 +130,16 @@ type ContainerInfo struct {
 
 // ServiceInfo contains relevant service information.
 type ServiceInfo struct {
-	Name              string            `json:"name"`
-	Namespace         string            `json:"namespace"`
-	UID               string            `json:"uid"`
-	Labels            map[string]string `json:"labels,omitempty"`
-	Annotations       map[string]string `json:"annotations,omitempty"`
-	Type              string            `json:"type"`
-	ClusterIP         string            `json:"clusterIP,omitempty"`
-	Ports             []PortInfo        `json:"ports,omitempty"`
-	Selector          map[string]string `json:"selector,omitempty"`
-	CreationTimestamp time.Time         `json:"creationTimestamp"`
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	ServiceType  string            `json:"service_type,omitempty"`
+	ClusterIP    string            `json:"cluster_ip,omitempty"`
+	Ports        []PortInfo        `json:"ports,omitempty"`
+	Selector     map[string]string `json:"selector,omitempty"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // PortInfo contains service port information.
@@ -149,13 +152,14 @@ type PortInfo struct {
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
 func NewNamespaceInfo(ns *corev1.Namespace) NamespaceInfo {
+	createdAt := ns.CreationTimestamp.Time
 	return NamespaceInfo{
-		Name:              ns.Name,
-		UID:               string(ns.UID),
-		Labels:            ns.Labels,
-		Annotations:       filterAnnotations(ns.Annotations),
-		Phase:             string(ns.Status.Phase),
-		CreationTimestamp: ns.CreationTimestamp.Time,
+		UID:          string(ns.UID),
+		Name:         ns.Name,
+		Labels:       ns.Labels,
+		Annotations:  filterAnnotations(ns.Annotations),
+		Phase:        string(ns.Status.Phase),
+		K8sCreatedAt: &createdAt,
 	}
 }
 
@@ -169,17 +173,18 @@ func NewPodInfo(pod *corev1.Pod) PodInfo {
 		})
 	}
 
+	createdAt := pod.CreationTimestamp.Time
 	return PodInfo{
-		Name:              pod.Name,
-		Namespace:         pod.Namespace,
-		UID:               string(pod.UID),
-		Labels:            pod.Labels,
-		Annotations:       filterAnnotations(pod.Annotations),
-		Phase:             string(pod.Status.Phase),
-		NodeName:          pod.Spec.NodeName,
-		ServiceAccount:    pod.Spec.ServiceAccountName,
-		Containers:        containers,
-		CreationTimestamp: pod.CreationTimestamp.Time,
+		UID:            string(pod.UID),
+		Name:           pod.Name,
+		Namespace:      pod.Namespace,
+		Labels:         pod.Labels,
+		Annotations:    filterAnnotations(pod.Annotations),
+		NodeName:       pod.Spec.NodeName,
+		ServiceAccount: pod.Spec.ServiceAccountName,
+		Containers:     containers,
+		Phase:          string(pod.Status.Phase),
+		K8sCreatedAt:   &createdAt,
 	}
 }
 
@@ -195,17 +200,18 @@ func NewServiceInfo(svc *corev1.Service) ServiceInfo {
 		})
 	}
 
+	createdAt := svc.CreationTimestamp.Time
 	return ServiceInfo{
-		Name:              svc.Name,
-		Namespace:         svc.Namespace,
-		UID:               string(svc.UID),
-		Labels:            svc.Labels,
-		Annotations:       filterAnnotations(svc.Annotations),
-		Type:              string(svc.Spec.Type),
-		ClusterIP:         svc.Spec.ClusterIP,
-		Ports:             ports,
-		Selector:          svc.Spec.Selector,
-		CreationTimestamp: svc.CreationTimestamp.Time,
+		UID:          string(svc.UID),
+		Name:         svc.Name,
+		Namespace:    svc.Namespace,
+		Labels:       svc.Labels,
+		Annotations:  filterAnnotations(svc.Annotations),
+		ServiceType:  string(svc.Spec.Type),
+		ClusterIP:    svc.Spec.ClusterIP,
+		Ports:        ports,
+		Selector:     svc.Spec.Selector,
+		K8sCreatedAt: &createdAt,
 	}
 }
 
