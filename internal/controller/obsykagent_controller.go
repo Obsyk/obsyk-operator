@@ -6,6 +6,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	obsykv1 "github.com/obsyk/obsyk-operator/api/v1"
+	"github.com/obsyk/obsyk-operator/internal/auth"
 	"github.com/obsyk/obsyk-operator/internal/transport"
 )
 
@@ -28,21 +30,33 @@ const (
 	kubeSystemNamespace = "kube-system"
 )
 
+// agentClient holds a transport client and its token manager
+type agentClient struct {
+	transport    *transport.Client
+	tokenManager *auth.TokenManager
+}
+
 // ObsykAgentReconciler reconciles an ObsykAgent object.
 type ObsykAgentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	// transportClients holds a client per ObsykAgent (keyed by namespace/name).
-	transportClients map[string]*transport.Client
+	// agentClients holds a client per ObsykAgent (keyed by namespace/name).
+	agentClients map[string]*agentClient
+
+	// httpClient is shared across all token managers
+	httpClient *http.Client
 }
 
 // NewObsykAgentReconciler creates a new reconciler.
 func NewObsykAgentReconciler(client client.Client, scheme *runtime.Scheme) *ObsykAgentReconciler {
 	return &ObsykAgentReconciler{
-		Client:           client,
-		Scheme:           scheme,
-		transportClients: make(map[string]*transport.Client),
+		Client:       client,
+		Scheme:       scheme,
+		agentClients: make(map[string]*agentClient),
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
@@ -62,8 +76,8 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	agent := &obsykv1.ObsykAgent{}
 	if err := r.Get(ctx, req.NamespacedName, agent); err != nil {
 		if errors.IsNotFound(err) {
-			// Object deleted, clean up transport client
-			delete(r.transportClients, req.String())
+			// Object deleted, clean up client
+			delete(r.agentClients, req.String())
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -71,12 +85,12 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	logger.Info("reconciling ObsykAgent", "name", agent.Name, "namespace", agent.Namespace)
 
-	// Get or create transport client
-	transportClient, err := r.getOrCreateTransportClient(ctx, agent)
+	// Get or create transport client with OAuth2 authentication
+	ac, err := r.getOrCreateAgentClient(ctx, agent)
 	if err != nil {
-		logger.Error(err, "failed to create transport client")
+		logger.Error(err, "failed to create agent client")
 		r.setCondition(agent, obsykv1.ConditionTypeDegraded, metav1.ConditionTrue,
-			"TransportClientError", err.Error())
+			"AuthenticationError", err.Error())
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
 	}
 
@@ -92,7 +106,7 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Check if we need to send initial snapshot
 	if agent.Status.LastSnapshotTime == nil {
-		if err := r.sendSnapshot(ctx, agent, transportClient); err != nil {
+		if err := r.sendSnapshot(ctx, agent, ac.transport); err != nil {
 			logger.Error(err, "failed to send snapshot")
 			r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
 				"SnapshotFailed", err.Error())
@@ -135,35 +149,55 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	return ctrl.Result{RequeueAfter: syncInterval}, nil
 }
 
-// getOrCreateTransportClient gets or creates a transport client for the agent.
-func (r *ObsykAgentReconciler) getOrCreateTransportClient(ctx context.Context, agent *obsykv1.ObsykAgent) (*transport.Client, error) {
+// getOrCreateAgentClient gets or creates an agent client with OAuth2 authentication.
+func (r *ObsykAgentReconciler) getOrCreateAgentClient(ctx context.Context, agent *obsykv1.ObsykAgent) (*agentClient, error) {
 	key := fmt.Sprintf("%s/%s", agent.Namespace, agent.Name)
+	logger := log.FromContext(ctx)
 
-	// Get API key from secret
-	apiKey, err := r.getAPIKey(ctx, agent)
+	// Get credentials from secret
+	creds, err := r.getCredentials(ctx, agent)
 	if err != nil {
-		return nil, fmt.Errorf("getting API key: %w", err)
+		return nil, fmt.Errorf("getting credentials: %w", err)
 	}
 
-	// Check if client exists and update API key
-	if client, ok := r.transportClients[key]; ok {
-		client.UpdateAPIKey(apiKey)
-		return client, nil
+	// Check if client exists
+	if ac, ok := r.agentClients[key]; ok {
+		// Update credentials in case they changed
+		ac.tokenManager.UpdateCredentials(creds)
+		return ac, nil
 	}
 
-	// Create new client
-	client := transport.NewClient(transport.ClientConfig{
-		PlatformURL: agent.Spec.PlatformURL,
-		APIKey:      apiKey,
-		Logger:      log.FromContext(ctx),
+	// Create new token manager
+	tokenManager := auth.NewTokenManager(
+		agent.Spec.PlatformURL,
+		creds,
+		r.httpClient,
+		logger,
+	)
+
+	// Create new transport client
+	transportClient := transport.NewClient(transport.ClientConfig{
+		PlatformURL:   agent.Spec.PlatformURL,
+		TokenProvider: tokenManager,
+		Logger:        logger,
 	})
-	r.transportClients[key] = client
 
-	return client, nil
+	ac := &agentClient{
+		transport:    transportClient,
+		tokenManager: tokenManager,
+	}
+	r.agentClients[key] = ac
+
+	return ac, nil
 }
 
-// getAPIKey retrieves the API key from the referenced secret.
-func (r *ObsykAgentReconciler) getAPIKey(ctx context.Context, agent *obsykv1.ObsykAgent) (string, error) {
+// getCredentials retrieves OAuth2 credentials from the referenced secret.
+// Expected secret format:
+//
+//	data:
+//	  client_id: <OAuth2 client ID from platform>
+//	  private_key: <PEM-encoded ECDSA P-256 private key>
+func (r *ObsykAgentReconciler) getCredentials(ctx context.Context, agent *obsykv1.ObsykAgent) (*auth.Credentials, error) {
 	secret := &corev1.Secret{}
 	secretRef := types.NamespacedName{
 		Namespace: agent.Namespace,
@@ -171,16 +205,15 @@ func (r *ObsykAgentReconciler) getAPIKey(ctx context.Context, agent *obsykv1.Obs
 	}
 
 	if err := r.Get(ctx, secretRef, secret); err != nil {
-		return "", fmt.Errorf("getting secret %s: %w", secretRef, err)
+		return nil, fmt.Errorf("getting secret %s: %w", secretRef, err)
 	}
 
-	key := agent.Spec.APIKeySecretRef.Key
-	apiKey, ok := secret.Data[key]
-	if !ok {
-		return "", fmt.Errorf("key %q not found in secret %s", key, secretRef)
+	creds, err := auth.ParseCredentials(secret.Data)
+	if err != nil {
+		return nil, fmt.Errorf("parsing credentials from secret %s: %w", secretRef, err)
 	}
 
-	return string(apiKey), nil
+	return creds, nil
 }
 
 // getClusterUID retrieves the cluster UID from the kube-system namespace.
