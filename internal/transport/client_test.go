@@ -15,6 +15,19 @@ import (
 	"github.com/go-logr/logr"
 )
 
+// mockTokenProvider is a simple token provider for testing
+type mockTokenProvider struct {
+	token string
+	err   error
+}
+
+func (m *mockTokenProvider) GetAccessToken(ctx context.Context) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return m.token, nil
+}
+
 func TestClient_SendSnapshot(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -45,7 +58,7 @@ func TestClient_SendSnapshot(t *testing.T) {
 			serverResponse: http.StatusUnauthorized,
 			serverBody:     "invalid api key",
 			wantErr:        true,
-			errType:        "client",
+			errType:        "auth",
 		},
 	}
 
@@ -59,8 +72,8 @@ func TestClient_SendSnapshot(t *testing.T) {
 				if r.URL.Path != endpointSnapshot {
 					t.Errorf("expected %s, got %s", endpointSnapshot, r.URL.Path)
 				}
-				if r.Header.Get("Authorization") != "Bearer test-api-key" {
-					t.Errorf("missing or invalid Authorization header")
+				if r.Header.Get("Authorization") != "Bearer test-access-token" {
+					t.Errorf("missing or invalid Authorization header: %s", r.Header.Get("Authorization"))
 				}
 				if r.Header.Get("Content-Type") != "application/json" {
 					t.Errorf("missing Content-Type header")
@@ -74,9 +87,9 @@ func TestClient_SendSnapshot(t *testing.T) {
 			defer server.Close()
 
 			client := NewClient(ClientConfig{
-				PlatformURL: server.URL,
-				APIKey:      "test-api-key",
-				Logger:      logr.Discard(),
+				PlatformURL:   server.URL,
+				TokenProvider: &mockTokenProvider{token: "test-access-token"},
+				Logger:        logr.Discard(),
 			})
 
 			payload := &SnapshotPayload{
@@ -94,6 +107,11 @@ func TestClient_SendSnapshot(t *testing.T) {
 				if tt.errType == "client" {
 					if _, ok := err.(*ClientError); !ok {
 						t.Errorf("expected ClientError, got %T", err)
+					}
+				}
+				if tt.errType == "auth" {
+					if _, ok := err.(*AuthError); !ok {
+						t.Errorf("expected AuthError, got %T", err)
 					}
 				}
 			} else {
@@ -125,9 +143,9 @@ func TestClient_SendEvent(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "test-api-key",
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-access-token"},
+		Logger:        logr.Discard(),
 	})
 
 	payload := &EventPayload{
@@ -155,9 +173,9 @@ func TestClient_SendHeartbeat(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "test-api-key",
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-access-token"},
+		Logger:        logr.Discard(),
 	})
 
 	payload := &HeartbeatPayload{
@@ -194,10 +212,10 @@ func TestClient_RetryOnServerError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "test-api-key",
-		Timeout:     5 * time.Second,
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-access-token"},
+		Timeout:       5 * time.Second,
+		Logger:        logr.Discard(),
 	})
 
 	payload := &HeartbeatPayload{
@@ -227,9 +245,9 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "test-api-key",
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-access-token"},
+		Logger:        logr.Discard(),
 	})
 
 	payload := &HeartbeatPayload{
@@ -258,9 +276,9 @@ func TestClient_ContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "test-api-key",
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-access-token"},
+		Logger:        logr.Discard(),
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -278,7 +296,7 @@ func TestClient_ContextCancellation(t *testing.T) {
 	}
 }
 
-func TestClient_UpdateAPIKey(t *testing.T) {
+func TestClient_UpdateTokenProvider(t *testing.T) {
 	var receivedKey string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -288,9 +306,9 @@ func TestClient_UpdateAPIKey(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(ClientConfig{
-		PlatformURL: server.URL,
-		APIKey:      "old-key",
-		Logger:      logr.Discard(),
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "old-token"},
+		Logger:        logr.Discard(),
 	})
 
 	payload := &HeartbeatPayload{
@@ -299,16 +317,16 @@ func TestClient_UpdateAPIKey(t *testing.T) {
 		Timestamp:   time.Now(),
 	}
 
-	// First request with old key
+	// First request with old token
 	client.SendHeartbeat(context.Background(), payload)
-	if receivedKey != "Bearer old-key" {
-		t.Errorf("expected old key, got %s", receivedKey)
+	if receivedKey != "Bearer old-token" {
+		t.Errorf("expected old token, got %s", receivedKey)
 	}
 
-	// Update key and send again
-	client.UpdateAPIKey("new-key")
+	// Update token provider and send again
+	client.UpdateTokenProvider(&mockTokenProvider{token: "new-token"})
 	client.SendHeartbeat(context.Background(), payload)
-	if receivedKey != "Bearer new-key" {
-		t.Errorf("expected new key, got %s", receivedKey)
+	if receivedKey != "Bearer new-token" {
+		t.Errorf("expected new token, got %s", receivedKey)
 	}
 }
