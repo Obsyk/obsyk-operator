@@ -93,9 +93,9 @@ func TestClient_SendSnapshot(t *testing.T) {
 			})
 
 			payload := &SnapshotPayload{
-				ClusterName: "test-cluster",
-				ClusterUID:  "test-uid",
-				Timestamp:   time.Now(),
+				ClusterUID:   "test-uid",
+				ClusterName:  "test-cluster",
+				AgentVersion: "0.1.0",
 			}
 
 			err := client.SendSnapshot(context.Background(), payload)
@@ -134,8 +134,8 @@ func TestClient_SendEvent(t *testing.T) {
 			t.Errorf("failed to decode payload: %v", err)
 		}
 
-		if payload.EventType != EventTypeAdded {
-			t.Errorf("expected event type ADDED, got %s", payload.EventType)
+		if payload.Type != "added" {
+			t.Errorf("expected event type added, got %s", payload.Type)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -149,12 +149,13 @@ func TestClient_SendEvent(t *testing.T) {
 	})
 
 	payload := &EventPayload{
-		ClusterName:  "test-cluster",
-		ClusterUID:   "test-uid",
-		Timestamp:    time.Now(),
-		EventType:    EventTypeAdded,
-		ResourceType: ResourceTypePod,
-		Resource:     map[string]string{"name": "test-pod"},
+		ClusterUID: "test-uid",
+		Type:       "added",
+		Kind:       "Pod",
+		UID:        "pod-uid-123",
+		Name:       "test-pod",
+		Namespace:  "default",
+		Object:     map[string]string{"name": "test-pod"},
 	}
 
 	err := client.SendEvent(context.Background(), payload)
@@ -179,14 +180,8 @@ func TestClient_SendHeartbeat(t *testing.T) {
 	})
 
 	payload := &HeartbeatPayload{
-		ClusterName: "test-cluster",
-		ClusterUID:  "test-uid",
-		Timestamp:   time.Now(),
-		ResourceCounts: ResourceCounts{
-			Namespaces: 10,
-			Pods:       100,
-			Services:   20,
-		},
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
 	}
 
 	err := client.SendHeartbeat(context.Background(), payload)
@@ -219,9 +214,8 @@ func TestClient_RetryOnServerError(t *testing.T) {
 	})
 
 	payload := &HeartbeatPayload{
-		ClusterName: "test-cluster",
-		ClusterUID:  "test-uid",
-		Timestamp:   time.Now(),
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
 	}
 
 	err := client.SendHeartbeat(context.Background(), payload)
@@ -251,9 +245,8 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 	})
 
 	payload := &HeartbeatPayload{
-		ClusterName: "test-cluster",
-		ClusterUID:  "test-uid",
-		Timestamp:   time.Now(),
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
 	}
 
 	err := client.SendHeartbeat(context.Background(), payload)
@@ -285,9 +278,8 @@ func TestClient_ContextCancellation(t *testing.T) {
 	defer cancel()
 
 	payload := &HeartbeatPayload{
-		ClusterName: "test-cluster",
-		ClusterUID:  "test-uid",
-		Timestamp:   time.Now(),
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
 	}
 
 	err := client.SendHeartbeat(ctx, payload)
@@ -312,9 +304,8 @@ func TestClient_UpdateTokenProvider(t *testing.T) {
 	})
 
 	payload := &HeartbeatPayload{
-		ClusterName: "test-cluster",
-		ClusterUID:  "test-uid",
-		Timestamp:   time.Now(),
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
 	}
 
 	// First request with old token
