@@ -19,9 +19,9 @@ import (
 
 const (
 	// API endpoints
-	endpointSnapshot  = "/api/v1/agents/snapshot"
-	endpointEvents    = "/api/v1/agents/events"
-	endpointHeartbeat = "/api/v1/agents/heartbeat"
+	endpointSnapshot  = "/api/v1/agent/snapshot"
+	endpointEvents    = "/api/v1/agent/events"
+	endpointHeartbeat = "/api/v1/agent/heartbeat"
 
 	// Default timeouts
 	defaultTimeout = 30 * time.Second
@@ -34,20 +34,26 @@ const (
 	jitterFactor      = 0.1
 )
 
+// TokenProvider provides access tokens for API authentication
+type TokenProvider interface {
+	// GetAccessToken returns a valid access token, refreshing if necessary
+	GetAccessToken(ctx context.Context) (string, error)
+}
+
 // Client handles HTTP communication with the Obsyk platform.
 type Client struct {
-	httpClient  *http.Client
-	platformURL string
-	apiKey      string
-	log         logr.Logger
+	httpClient    *http.Client
+	platformURL   string
+	tokenProvider TokenProvider
+	log           logr.Logger
 }
 
 // ClientConfig holds configuration for creating a new Client.
 type ClientConfig struct {
-	PlatformURL string
-	APIKey      string
-	Timeout     time.Duration
-	Logger      logr.Logger
+	PlatformURL   string
+	TokenProvider TokenProvider
+	Timeout       time.Duration
+	Logger        logr.Logger
 }
 
 // NewClient creates a new transport client.
@@ -61,16 +67,15 @@ func NewClient(cfg ClientConfig) *Client {
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
-		platformURL: cfg.PlatformURL,
-		apiKey:      cfg.APIKey,
-		log:         cfg.Logger,
+		platformURL:   cfg.PlatformURL,
+		tokenProvider: cfg.TokenProvider,
+		log:           cfg.Logger,
 	}
 }
 
-// UpdateAPIKey updates the API key used for authentication.
-// This is useful when the key is refreshed from the Secret.
-func (c *Client) UpdateAPIKey(apiKey string) {
-	c.apiKey = apiKey
+// UpdateTokenProvider updates the token provider used for authentication.
+func (c *Client) UpdateTokenProvider(provider TokenProvider) {
+	c.tokenProvider = provider
 }
 
 // SendSnapshot sends a full cluster state snapshot to the platform.
@@ -131,6 +136,12 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 
 // send performs the actual HTTP request.
 func (c *Client) send(ctx context.Context, endpoint string, payload interface{}) error {
+	// Get access token
+	accessToken, err := c.tokenProvider.GetAccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("getting access token: %w", err)
+	}
+
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshaling payload: %w", err)
@@ -143,7 +154,7 @@ func (c *Client) send(ctx context.Context, endpoint string, payload interface{})
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("User-Agent", "obsyk-operator/1.0")
 
 	resp, err := c.httpClient.Do(req)
@@ -161,6 +172,12 @@ func (c *Client) send(ctx context.Context, endpoint string, payload interface{})
 
 	// Create appropriate error based on status code
 	switch {
+	case resp.StatusCode == 401:
+		// Unauthorized - token may be expired or invalid
+		return &AuthError{
+			StatusCode: resp.StatusCode,
+			Message:    string(respBody),
+		}
 	case resp.StatusCode >= 500:
 		return &ServerError{
 			StatusCode: resp.StatusCode,
@@ -191,6 +208,16 @@ func (c *Client) calculateBackoff(attempt int) time.Duration {
 	backoff += jitter
 
 	return time.Duration(backoff)
+}
+
+// AuthError represents an authentication error (401).
+type AuthError struct {
+	StatusCode int
+	Message    string
+}
+
+func (e *AuthError) Error() string {
+	return fmt.Sprintf("auth error %d: %s", e.StatusCode, e.Message)
 }
 
 // ServerError represents a 5xx server error (retryable).
