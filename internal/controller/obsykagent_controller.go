@@ -211,7 +211,7 @@ func (r *ObsykAgentReconciler) getCredentials(ctx context.Context, agent *obsykv
 	secret := &corev1.Secret{}
 	secretRef := types.NamespacedName{
 		Namespace: agent.Namespace,
-		Name:      agent.Spec.APIKeySecretRef.Name,
+		Name:      agent.Spec.CredentialsSecretRef.Name,
 	}
 
 	if err := r.Get(ctx, secretRef, secret); err != nil {
