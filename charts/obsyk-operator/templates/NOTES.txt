@@ -33,7 +33,7 @@ To create an agent manually:
     name: obsyk-agent
     namespace: {{ .Release.Namespace }}
   spec:
-    platformURL: "https://api.obsyk.com"
+    platformURL: "https://api.obsyk.ai"
     clusterName: "your-cluster-name"
     apiKeySecretRef:
       name: obsyk-api-key
@@ -42,4 +42,4 @@ To create an agent manually:
 
 {{- end }}
 
-For more information, visit: https://docs.obsyk.com
+For more information, visit: https://docs.obsyk.ai

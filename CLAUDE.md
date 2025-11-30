@@ -68,7 +68,7 @@ metadata:
   namespace: obsyk-system
 spec:
   # Platform endpoint (Obsyk SaaS)
-  platformURL: "https://api.obsyk.com"
+  platformURL: "https://api.obsyk.ai"
 
   # Logical cluster identifier
   clusterName: "production-us-east-1"
@@ -349,7 +349,7 @@ The operator uses OAuth2 JWT Bearer Assertion (RFC 7523) for authentication:
 {
   "iss": "<client_id>",
   "sub": "<client_id>",
-  "aud": ["https://api.obsyk.com"],
+  "aud": ["https://api.obsyk.ai"],
   "iat": 1705312200,
   "exp": 1705312500,
   "jti": "<unique-id>"
@@ -358,7 +358,7 @@ The operator uses OAuth2 JWT Bearer Assertion (RFC 7523) for authentication:
 
 **Token Request:**
 ```bash
-curl -X POST https://api.obsyk.com/oauth/token \
+curl -X POST https://api.obsyk.ai/oauth/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" \
   -d "assertion=<signed-jwt>"
@@ -366,7 +366,7 @@ curl -X POST https://api.obsyk.com/oauth/token \
 
 **API Request:**
 ```bash
-curl -X POST https://api.obsyk.com/api/v1/agent/snapshot \
+curl -X POST https://api.obsyk.ai/api/v1/agent/snapshot \
   -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: application/json" \
   -d '{"cluster_uid": "...", ...}'

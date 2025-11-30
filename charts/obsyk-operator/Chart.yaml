@@ -5,13 +5,13 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 kubeVersion: ">=1.26.0-0"
-home: https://obsyk.com
+home: https://obsyk.ai
 sources:
   - https://github.com/Obsyk/obsyk-operator
 maintainers:
   - name: Obsyk
     email: support@obsyk.com
-    url: https://obsyk.com
+    url: https://obsyk.ai
 keywords:
   - observability
   - kubernetes

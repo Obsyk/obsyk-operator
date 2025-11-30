@@ -1,6 +1,6 @@
 # Obsyk Operator
 
-Kubernetes operator that connects your cluster to the [Obsyk](https://obsyk.com) observability platform. Deploy once and automatically stream cluster metadata to gain visibility across your infrastructure.
+Kubernetes operator that connects your cluster to the [Obsyk](https://obsyk.ai) observability platform. Deploy once and automatically stream cluster metadata to gain visibility across your infrastructure.
 
 ## Features
 
@@ -40,7 +40,7 @@ kubectl create secret generic obsyk-api-key \
 helm install obsyk-operator obsyk/obsyk-operator \
   --namespace obsyk-system \
   --set agent.clusterName="my-cluster" \
-  --set agent.platformURL="https://api.obsyk.com"
+  --set agent.platformURL="https://api.obsyk.ai"
 ```
 
 ## Configuration
@@ -50,7 +50,7 @@ helm install obsyk-operator obsyk/obsyk-operator \
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `agent.clusterName` | Logical name for this cluster | `""` (required) |
-| `agent.platformURL` | Obsyk platform endpoint | `https://api.obsyk.com` |
+| `agent.platformURL` | Obsyk platform endpoint | `https://api.obsyk.ai` |
 | `agent.apiKeySecretRef.name` | Secret containing API key | `obsyk-api-key` |
 | `agent.apiKeySecretRef.key` | Key within the Secret | `token` |
 | `replicaCount` | Number of operator replicas | `1` |
@@ -70,7 +70,7 @@ metadata:
   name: obsyk-agent
   namespace: obsyk-system
 spec:
-  platformURL: "https://api.obsyk.com"
+  platformURL: "https://api.obsyk.ai"
   clusterName: "production-us-east-1"
   apiKeySecretRef:
     name: obsyk-api-key
@@ -155,6 +155,6 @@ Apache License 2.0 - see [LICENSE](./LICENSE) for details.
 
 ## Support
 
-- Documentation: [docs.obsyk.com](https://docs.obsyk.com)
+- Documentation: [docs.obsyk.ai](https://docs.obsyk.ai)
 - Issues: [GitHub Issues](https://github.com/Obsyk/obsyk-operator/issues)
 - Email: support@obsyk.com
