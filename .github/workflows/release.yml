@@ -112,9 +112,20 @@ jobs:
       - name: Package and index Helm chart
         run: |
           if [ -d "main/charts/obsyk-operator" ]; then
+            # Package the chart
             helm package main/charts/obsyk-operator --destination .
+
+            # Remove the main checkout directory before adding to git
+            rm -rf main
+
+            # Add .nojekyll to prevent Jekyll processing
+            touch .nojekyll
+
+            # Update the helm repo index
             helm repo index . --url https://obsyk.github.io/obsyk-operator
-            git add .
+
+            # Add only the chart files, not everything
+            git add index.yaml .nojekyll "obsyk-operator-*.tgz"
             git commit -m "Release Helm chart ${{ github.ref_name }}"
             git push
           fi
