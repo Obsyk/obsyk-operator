@@ -7,15 +7,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// SecretKeySelector selects a key from a Secret.
-type SecretKeySelector struct {
-	// Name of the Secret.
+// SecretReference references a Secret containing OAuth2 credentials.
+// The Secret must contain the following keys:
+//   - client_id: OAuth2 client ID from the platform
+//   - private_key: PEM-encoded ECDSA P-256 private key for JWT signing
+type SecretReference struct {
+	// Name of the Secret containing OAuth2 credentials.
 	// +kubebuilder:validation:Required
 	Name string `json:"name"`
-
-	// Key within the Secret.
-	// +kubebuilder:validation:Required
-	Key string `json:"key"`
 }
 
 // ObsykAgentSpec defines the desired state of ObsykAgent.
@@ -33,11 +32,11 @@ type ObsykAgentSpec struct {
 	// +kubebuilder:validation:MaxLength=253
 	ClusterName string `json:"clusterName"`
 
-	// APIKeySecretRef references a Secret containing the Obsyk API key.
-	// The API key is used for authentication and determines the organization.
-	// IMPORTANT: Never store the API key directly in this spec.
+	// CredentialsSecretRef references a Secret containing OAuth2 credentials.
+	// The Secret must contain 'client_id' (from platform) and 'private_key' (ECDSA P-256 PEM).
+	// Generate keys locally, upload public key to platform, store private key in this Secret.
 	// +kubebuilder:validation:Required
-	APIKeySecretRef SecretKeySelector `json:"apiKeySecretRef"`
+	CredentialsSecretRef SecretReference `json:"credentialsSecretRef"`
 
 	// SyncInterval is how often to send heartbeat/full sync to the platform.
 	// Defaults to 5m if not specified.

@@ -59,22 +59,6 @@ spec:
           spec:
             description: ObsykAgentSpec defines the desired state of ObsykAgent.
             properties:
-              apiKeySecretRef:
-                description: |-
-                  APIKeySecretRef references a Secret containing the Obsyk API key.
-                  The API key is used for authentication and determines the organization.
-                  IMPORTANT: Never store the API key directly in this spec.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
               clusterName:
                 description: |-
                   ClusterName is a human-friendly identifier for this cluster.
@@ -83,6 +67,18 @@ spec:
                 maxLength: 253
                 minLength: 1
                 type: string
+              credentialsSecretRef:
+                description: |-
+                  CredentialsSecretRef references a Secret containing OAuth2 credentials.
+                  The Secret must contain 'client_id' (from platform) and 'private_key' (ECDSA P-256 PEM).
+                  Generate keys locally, upload public key to platform, store private key in this Secret.
+                properties:
+                  name:
+                    description: Name of the Secret containing OAuth2 credentials.
+                    type: string
+                required:
+                - name
+                type: object
               platformURL:
                 description: PlatformURL is the Obsyk SaaS platform endpoint.
                 pattern: ^https?://
@@ -94,8 +90,8 @@ spec:
                   Defaults to 5m if not specified.
                 type: string
             required:
-            - apiKeySecretRef
             - clusterName
+            - credentialsSecretRef
             - platformURL
             type: object
           status:

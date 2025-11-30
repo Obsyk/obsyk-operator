@@ -6,11 +6,21 @@ Your Obsyk agent has been configured with:
   - Cluster Name: {{ .Values.agent.clusterName }}
   - Platform URL: {{ .Values.agent.platformURL }}
 
-IMPORTANT: Make sure you have created the API key secret:
+IMPORTANT: Make sure you have created the OAuth2 credentials secret.
 
-  kubectl create secret generic {{ .Values.agent.apiKeySecretRef.name }} \
-    --namespace {{ .Release.Namespace }} \
-    --from-literal={{ .Values.agent.apiKeySecretRef.key }}=YOUR_API_KEY
+1. Generate ECDSA P-256 key pair (if not already done):
+
+   openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
+   openssl ec -in private-key.pem -pubout -out public-key.pem
+
+2. Upload public key to platform UI and get your client_id
+
+3. Create the credentials secret:
+
+   kubectl create secret generic {{ .Values.agent.credentialsSecretRef.name }} \
+     --namespace {{ .Release.Namespace }} \
+     --from-literal=client_id=YOUR_CLIENT_ID \
+     --from-file=private_key=private-key.pem
 
 To check the agent status:
 
@@ -35,9 +45,8 @@ To create an agent manually:
   spec:
     platformURL: "https://api.obsyk.ai"
     clusterName: "your-cluster-name"
-    apiKeySecretRef:
-      name: obsyk-api-key
-      key: token
+    credentialsSecretRef:
+      name: obsyk-credentials
   EOF
 
 {{- end }}
