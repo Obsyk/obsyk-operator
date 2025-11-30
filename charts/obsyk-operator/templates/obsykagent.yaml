@@ -11,8 +11,7 @@ metadata:
 spec:
   platformURL: {{ .Values.agent.platformURL | quote }}
   clusterName: {{ .Values.agent.clusterName | quote }}
-  apiKeySecretRef:
-    name: {{ .Values.agent.apiKeySecretRef.name | quote }}
-    key: {{ .Values.agent.apiKeySecretRef.key | quote }}
+  credentialsSecretRef:
+    name: {{ .Values.agent.credentialsSecretRef.name | quote }}
   syncInterval: {{ .Values.agent.syncInterval | quote }}
 {{- end }}
