@@ -22,7 +22,7 @@ agent:
   clusterName: ""
 
   # Obsyk platform URL
-  platformURL: "https://api.obsyk.com"
+  platformURL: "https://api.obsyk.ai"
 
   # API key secret reference
   apiKeySecretRef:
