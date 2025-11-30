@@ -24,12 +24,12 @@ agent:
   # Obsyk platform URL
   platformURL: "https://api.obsyk.ai"
 
-  # API key secret reference
-  apiKeySecretRef:
-    # Name of the secret containing the API key
-    name: "obsyk-api-key"
-    # Key within the secret
-    key: "token"
+  # OAuth2 credentials secret reference
+  # The secret must contain:
+  #   - client_id: OAuth2 client ID from the platform
+  #   - private_key: PEM-encoded ECDSA P-256 private key
+  credentialsSecretRef:
+    name: "obsyk-credentials"
 
   # How often to sync with the platform
   syncInterval: "5m"

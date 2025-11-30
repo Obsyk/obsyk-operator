@@ -74,7 +74,7 @@ spec:
   clusterName: "production-us-east-1"
 
   # OAuth2 credentials stored in Secret (NEVER plain-text)
-  apiKeySecretRef:
+  credentialsSecretRef:
     name: obsyk-credentials
 status:
   clusterUID: "abc123-def456"  # Auto-detected from kube-system namespace
