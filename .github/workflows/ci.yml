@@ -44,3 +44,14 @@ jobs:
           else
             echo "Helm chart not yet created, skipping lint"
           fi
+
+      - name: Validate Helm template
+        run: |
+          if [ -d "charts/obsyk-operator" ]; then
+            # Validate template renders correctly with required values
+            helm template test-release charts/obsyk-operator \
+              --set agent.clusterName=ci-test-cluster \
+              --kube-version 1.28.0 \
+              > /dev/null
+            echo "Helm template validation passed"
+          fi

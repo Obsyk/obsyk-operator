@@ -2,8 +2,8 @@ apiVersion: v2
 name: obsyk-operator
 description: Kubernetes operator that connects your cluster to the Obsyk observability platform
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.0.0-dev
+appVersion: "v0.0.0-dev"
 kubeVersion: ">=1.26.0-0"
 home: https://obsyk.ai
 sources:
