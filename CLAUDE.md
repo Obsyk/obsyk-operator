@@ -50,6 +50,7 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
   /workflows/
     ci.yml                   # PR checks
     release.yml              # Release automation
+    e2e.yml                  # E2E tests on Kind cluster
 /Earthfile                   # Earthly build definitions
 /Dockerfile                  # Runtime image (used by Earthly)
 ```
@@ -106,16 +107,22 @@ data:
 
 ### Controller Logic
 
-1. **Initialization (Snapshot)**
-   - On startup or CR creation, perform full List of Namespaces, Pods, Services
-   - Send bulk "Snapshot" payload to platform
+1. **ClusterUID Detection**
+   - On startup, fetch the `kube-system` namespace UID
+   - This UID uniquely identifies the cluster across all Obsyk customers
+   - Stored in `status.clusterUID` and included in all API payloads
+   - Used by platform for multi-tenancy (same cluster name can exist in different orgs)
 
-2. **Event-Driven Watch (Delta)**
+2. **Initialization (Snapshot)**
+   - On startup or CR creation, perform full List of Namespaces, Pods, Services
+   - Send bulk "Snapshot" payload to platform with `cluster_uid`
+
+3. **Event-Driven Watch (Delta)**
    - Use controller-runtime's `Watches()` (NOT manual client-go watcher loops)
    - Implement custom EventHandler to capture resource changes
    - Send "Event" payload (Added/Updated/Deleted) immediately
 
-3. **Concurrency**
+4. **Concurrency**
    - Handle high event volume without blocking the work queue
    - Use buffered channels or batch processing if needed
 
@@ -252,7 +259,35 @@ GitHub Issues for bug/feature management.
 
 ### PR Checks (ci.yml)
 - Earthly `+ci` target runs: gofmt, go vet, golangci-lint, tests, build
-- Helm chart linting (when chart exists)
+- Helm chart linting and template validation
+
+### E2E Tests (e2e.yml) - on push to main
+- Creates Kind cluster
+- Builds operator image and loads into Kind
+- Deploys operator via Helm with pre-registered credentials
+- Verifies ObsykAgent syncs successfully (status.lastSyncTime set)
+- Cleans up Kind cluster
+
+**Required Secrets (pre-register cluster in platform first):**
+- `E2E_PLATFORM_URL`: Platform API URL (e.g., https://api.staging.obsyk.ai)
+- `E2E_CLIENT_ID`: OAuth client ID from cluster registration
+- `E2E_PRIVATE_KEY`: Base64-encoded PEM private key
+- `E2E_CLUSTER_NAME`: Cluster name registered in platform
+
+**Setup Instructions:**
+```bash
+# 1. Generate keypair
+openssl ecparam -genkey -name prime256v1 -noout -out private.pem
+openssl ec -in private.pem -pubout -out public.pem
+
+# 2. Register cluster in platform UI (upload public.pem, get client_id)
+
+# 3. Add secrets to GitHub
+gh secret set E2E_PLATFORM_URL --body "https://api.staging.obsyk.ai"
+gh secret set E2E_CLIENT_ID --body "<client-id-from-platform>"
+gh secret set E2E_CLUSTER_NAME --body "e2e-test-cluster"
+cat private.pem | base64 | gh secret set E2E_PRIVATE_KEY
+```
 
 ### Release (release.yml) - on tag push
 - Earthly builds and pushes Docker image to GHCR
@@ -377,3 +412,4 @@ curl -X POST https://api.obsyk.ai/api/v1/agent/snapshot \
 - 401: Authentication error (refresh token and retry once)
 - 4xx: Client error (log and don't retry)
 - 5xx: Server error (exponential backoff with jitter)
+
