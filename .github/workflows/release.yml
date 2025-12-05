@@ -39,16 +39,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract version
+        id: version
+        run: |
+          # Tag is like v0.1.0, extract both formats
+          TAG="${{ github.ref_name }}"
+          # Chart version: semver without 'v' prefix (e.g., 0.1.0)
+          CHART_VERSION="${TAG#v}"
+          # App version: keeps 'v' prefix to match Docker tag (e.g., v0.1.0)
+          APP_VERSION="${TAG}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "chart=${CHART_VERSION}" >> $GITHUB_OUTPUT
+          echo "app=${APP_VERSION}" >> $GITHUB_OUTPUT
+
       - name: Run CI checks
         run: earthly +ci
 
       - name: Build and push Docker image
-        run: earthly --push +docker --VERSION=${{ github.ref_name }}
+        run: earthly --push +docker --VERSION=${{ steps.version.outputs.tag }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -66,7 +79,10 @@ jobs:
       - name: Package Helm chart
         run: |
           if [ -d "charts/obsyk-operator" ]; then
-            helm package charts/obsyk-operator --version ${{ github.ref_name }} --app-version ${{ github.ref_name }}
+            # Chart version: semver (0.1.0), appVersion: Docker tag (v0.1.0)
+            helm package charts/obsyk-operator \
+              --version ${{ steps.version.outputs.chart }} \
+              --app-version ${{ steps.version.outputs.app }}
           fi
 
       - name: Create GitHub Release
@@ -109,11 +125,23 @@ jobs:
           ref: ${{ github.ref }}
           path: main
 
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          CHART_VERSION="${TAG#v}"
+          APP_VERSION="${TAG}"
+          echo "chart=${CHART_VERSION}" >> $GITHUB_OUTPUT
+          echo "app=${APP_VERSION}" >> $GITHUB_OUTPUT
+
       - name: Package and index Helm chart
         run: |
           if [ -d "main/charts/obsyk-operator" ]; then
-            # Package the chart
-            helm package main/charts/obsyk-operator --destination .
+            # Package the chart with proper versions
+            helm package main/charts/obsyk-operator \
+              --version ${{ steps.version.outputs.chart }} \
+              --app-version ${{ steps.version.outputs.app }} \
+              --destination .
 
             # Remove the main checkout directory before adding to git
             rm -rf main
