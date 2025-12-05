@@ -1,0 +1,142 @@
+# Copyright (c) Obsyk. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Nightly at 2 AM UTC
+  workflow_dispatch:  # Allow manual trigger
+
+# E2E test uses pre-registered cluster credentials stored in GitHub secrets:
+# - E2E_PLATFORM_URL: Platform API URL (e.g., https://api.staging.obsyk.ai)
+# - E2E_CLIENT_ID: OAuth client ID from cluster registration
+# - E2E_PRIVATE_KEY: Base64-encoded PEM private key
+# - E2E_CLUSTER_NAME: Cluster name registered in platform
+#
+# To set up:
+# 1. Generate keypair: openssl ecparam -genkey -name prime256v1 -noout -out private.pem
+# 2. Export public key: openssl ec -in private.pem -pubout -out public.pem
+# 3. Register cluster in platform UI (upload public.pem, get client_id)
+# 4. Add secrets to GitHub: gh secret set E2E_PRIVATE_KEY < private.pem (base64)
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: obsyk/obsyk-operator
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.0
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: obsyk-e2e
+
+      - name: Build operator image
+        run: earthly +docker --VERSION=e2e-test
+
+      - name: Load image into Kind
+        run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:e2e-test --name obsyk-e2e
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          # Decode base64 private key to file
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+
+          # Clean up temp file
+          rm /tmp/private.pem
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+        run: |
+          helm install obsyk-operator ./charts/obsyk-operator \
+            --namespace obsyk-system \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=e2e-test \
+            --set image.pullPolicy=Never \
+            --set agent.enabled=true \
+            --set agent.clusterName=$E2E_CLUSTER_NAME \
+            --set agent.platformURL=$E2E_PLATFORM_URL
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=120s
+
+      - name: Wait for initial sync
+        run: |
+          # Wait for ObsykAgent to report lastSyncTime
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 5
+          done
+
+          if [ -z "$SYNC_TIME" ]; then
+            echo "Timeout waiting for sync"
+            kubectl logs -n obsyk-system deployment/obsyk-operator --tail=50
+            exit 1
+          fi
+
+      - name: Verify ObsykAgent status
+        run: |
+          echo "=== ObsykAgent Status ==="
+          kubectl get obsykagent -n obsyk-system -o yaml
+
+          # Check status conditions
+          AVAILABLE=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.conditions[?(@.type=="Available")].status}')
+          SYNCING=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.conditions[?(@.type=="Syncing")].status}')
+
+          echo "Available: $AVAILABLE"
+          echo "Syncing: $SYNCING"
+
+          # Verify resource counts
+          NS_COUNT=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts.namespaces}')
+          POD_COUNT=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts.pods}')
+          SVC_COUNT=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts.services}')
+
+          echo "Resource counts - Namespaces: $NS_COUNT, Pods: $POD_COUNT, Services: $SVC_COUNT"
+
+          if [ "$AVAILABLE" != "True" ]; then
+            echo "ERROR: ObsykAgent is not Available"
+            exit 1
+          fi
+
+          echo "✅ E2E test passed - operator synced successfully"
+
+      - name: Cleanup - Delete Kind cluster
+        if: always()
+        run: kind delete cluster --name obsyk-e2e
