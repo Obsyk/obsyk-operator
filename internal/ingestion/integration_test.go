@@ -243,6 +243,10 @@ func TestIntegration_ConcurrentResourceCreation(t *testing.T) {
 		ClusterUID:      "concurrent-cluster",
 		EventSender:     sender,
 		EventBufferSize: 1000, // Large buffer for concurrent test
+		RateLimit: &RateLimitConfig{
+			EventsPerSecond: 1000, // High rate for test - not testing rate limiting here
+			BurstSize:       1000,
+		},
 	}
 
 	mgr := NewManager(clientset, cfg, log)

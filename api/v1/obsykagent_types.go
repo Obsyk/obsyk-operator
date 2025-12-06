@@ -17,6 +17,26 @@ type SecretReference struct {
 	Name string `json:"name"`
 }
 
+// RateLimitSpec configures rate limiting for event sending.
+type RateLimitSpec struct {
+	// EventsPerSecond is the maximum number of events to send per second.
+	// Defaults to 10 if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +kubebuilder:default=10
+	EventsPerSecond int32 `json:"eventsPerSecond,omitempty"`
+
+	// BurstSize is the maximum burst size for rate limiting.
+	// Allows temporary bursts above the rate limit.
+	// Defaults to 20 if not specified.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1000
+	// +kubebuilder:default=20
+	BurstSize int32 `json:"burstSize,omitempty"`
+}
+
 // ObsykAgentSpec defines the desired state of ObsykAgent.
 type ObsykAgentSpec struct {
 	// PlatformURL is the Obsyk SaaS platform endpoint.
@@ -43,6 +63,11 @@ type ObsykAgentSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default="5m"
 	SyncInterval metav1.Duration `json:"syncInterval,omitempty"`
+
+	// RateLimit configures rate limiting for sending events to the platform.
+	// This prevents overwhelming the platform API during high event volume.
+	// +kubebuilder:validation:Optional
+	RateLimit *RateLimitSpec `json:"rateLimit,omitempty"`
 }
 
 // ConditionType represents the type of condition.

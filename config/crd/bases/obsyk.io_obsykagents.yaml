@@ -83,6 +83,31 @@ spec:
                 description: PlatformURL is the Obsyk SaaS platform endpoint.
                 pattern: ^https?://
                 type: string
+              rateLimit:
+                description: |-
+                  RateLimit configures rate limiting for sending events to the platform.
+                  This prevents overwhelming the platform API during high event volume.
+                properties:
+                  burstSize:
+                    default: 20
+                    description: |-
+                      BurstSize is the maximum burst size for rate limiting.
+                      Allows temporary bursts above the rate limit.
+                      Defaults to 20 if not specified.
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                  eventsPerSecond:
+                    default: 10
+                    description: |-
+                      EventsPerSecond is the maximum number of events to send per second.
+                      Defaults to 10 if not specified.
+                    format: int32
+                    maximum: 1000
+                    minimum: 1
+                    type: integer
+                type: object
               syncInterval:
                 default: 5m
                 description: |-

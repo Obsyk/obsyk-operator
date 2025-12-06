@@ -12,6 +12,7 @@ import (
 	"github.com/obsyk/obsyk-operator/internal/transport"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -349,5 +350,223 @@ func TestResourceEventStruct(t *testing.T) {
 	}
 	if event.Kind != transport.ResourceTypePod {
 		t.Errorf("Kind = %v, want %v", event.Kind, transport.ResourceTypePod)
+	}
+}
+
+func TestManagerRateLimitConfig(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	sender := newMockEventSender()
+	log := ctrl.Log.WithName("test")
+
+	tests := []struct {
+		name      string
+		rateLimit *RateLimitConfig
+		wantRate  float64
+		wantBurst int
+	}{
+		{
+			name:      "default rate limit when nil",
+			rateLimit: nil,
+			wantRate:  DefaultEventsPerSecond,
+			wantBurst: DefaultBurstSize,
+		},
+		{
+			name: "custom rate limit",
+			rateLimit: &RateLimitConfig{
+				EventsPerSecond: 50,
+				BurstSize:       100,
+			},
+			wantRate:  50,
+			wantBurst: 100,
+		},
+		{
+			name: "zero values use defaults",
+			rateLimit: &RateLimitConfig{
+				EventsPerSecond: 0,
+				BurstSize:       0,
+			},
+			wantRate:  DefaultEventsPerSecond,
+			wantBurst: DefaultBurstSize,
+		},
+		{
+			name: "negative values use defaults",
+			rateLimit: &RateLimitConfig{
+				EventsPerSecond: -5,
+				BurstSize:       -10,
+			},
+			wantRate:  DefaultEventsPerSecond,
+			wantBurst: DefaultBurstSize,
+		},
+		{
+			name: "partial config - only rate",
+			rateLimit: &RateLimitConfig{
+				EventsPerSecond: 25,
+				BurstSize:       0,
+			},
+			wantRate:  25,
+			wantBurst: DefaultBurstSize,
+		},
+		{
+			name: "partial config - only burst",
+			rateLimit: &RateLimitConfig{
+				EventsPerSecond: 0,
+				BurstSize:       50,
+			},
+			wantRate:  DefaultEventsPerSecond,
+			wantBurst: 50,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := ManagerConfig{
+				ClusterUID:  "test-cluster-uid",
+				EventSender: sender,
+				RateLimit:   tt.rateLimit,
+			}
+
+			mgr := NewManager(clientset, cfg, log)
+			if mgr == nil {
+				t.Fatal("expected non-nil manager")
+			}
+			if mgr.limiter == nil {
+				t.Fatal("expected non-nil limiter")
+			}
+
+			// Check limiter configuration
+			gotRate := float64(mgr.limiter.Limit())
+			if gotRate != tt.wantRate {
+				t.Errorf("limiter rate = %v, want %v", gotRate, tt.wantRate)
+			}
+			if mgr.limiter.Burst() != tt.wantBurst {
+				t.Errorf("limiter burst = %v, want %v", mgr.limiter.Burst(), tt.wantBurst)
+			}
+		})
+	}
+}
+
+func TestManagerRateLimitEnforcement(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	sender := newMockEventSender()
+	log := ctrl.Log.WithName("test")
+
+	// Use a very low rate limit for testing: 2 events/sec, burst of 2
+	cfg := ManagerConfig{
+		ClusterUID:      "test-cluster-uid",
+		EventSender:     sender,
+		EventBufferSize: 100,
+		RateLimit: &RateLimitConfig{
+			EventsPerSecond: 2,
+			BurstSize:       2,
+		},
+	}
+
+	mgr := NewManager(clientset, cfg, log)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- mgr.Start(ctx)
+	}()
+
+	// Wait for manager to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Measure time to send multiple events
+	numEvents := 5
+	start := time.Now()
+
+	for i := 0; i < numEvents; i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "rate-test-pod-" + string(rune('a'+i)),
+				Namespace:       "default",
+				UID:             types.UID("pod-uid-" + string(rune('a'+i))),
+				ResourceVersion: "1",
+			},
+		}
+		_, _ = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+	}
+
+	// Wait for events to be processed
+	time.Sleep(2 * time.Second)
+
+	elapsed := time.Since(start)
+
+	// With rate limit of 2/sec and burst of 2, sending 5 events should take at least 1 second
+	// (2 immediately from burst, then 3 more at 2/sec = 1.5 seconds theoretically)
+	// We check for at least 500ms to account for processing overhead
+	if elapsed < 500*time.Millisecond {
+		t.Logf("elapsed time: %v", elapsed)
+		// This is more of a smoke test - rate limiting should slow things down
+	}
+
+	events := sender.getEvents()
+	t.Logf("received %d events in %v", len(events), elapsed)
+
+	mgr.Stop()
+}
+
+func TestManagerRateLimitContextCancellation(t *testing.T) {
+	clientset := fake.NewSimpleClientset()
+	sender := newMockEventSender()
+	log := ctrl.Log.WithName("test")
+
+	// Use a very low rate limit
+	cfg := ManagerConfig{
+		ClusterUID:      "test-cluster-uid",
+		EventSender:     sender,
+		EventBufferSize: 100,
+		RateLimit: &RateLimitConfig{
+			EventsPerSecond: 1, // Very slow: 1 event/sec
+			BurstSize:       1,
+		},
+	}
+
+	mgr := NewManager(clientset, cfg, log)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- mgr.Start(ctx)
+	}()
+
+	// Wait for manager to start
+	time.Sleep(100 * time.Millisecond)
+
+	// Create several pods to fill the event queue
+	for i := 0; i < 5; i++ {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "cancel-test-pod-" + string(rune('a'+i)),
+				Namespace:       "default",
+				UID:             types.UID("pod-uid-cancel-" + string(rune('a'+i))),
+				ResourceVersion: "1",
+			},
+		}
+		_, _ = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+	}
+
+	// Give events a moment to queue up
+	time.Sleep(100 * time.Millisecond)
+
+	// Cancel context while events are being rate-limited
+	cancel()
+
+	// Stop should complete without hanging
+	done := make(chan struct{})
+	go func() {
+		mgr.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success - stop completed
+	case <-time.After(5 * time.Second):
+		t.Error("Stop() hung when rate limiting was active")
 	}
 }

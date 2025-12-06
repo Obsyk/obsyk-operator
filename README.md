@@ -79,6 +79,8 @@ Your cluster should now appear as **Connected** in the Obsyk dashboard!
 | `agent.platformURL` | Obsyk platform endpoint | `https://api.obsyk.ai` |
 | `agent.credentialsSecretRef.name` | Secret containing OAuth2 credentials | `obsyk-credentials` |
 | `agent.syncInterval` | Heartbeat/sync interval | `5m` |
+| `agent.rateLimit.eventsPerSecond` | Max events per second to platform | `10` |
+| `agent.rateLimit.burstSize` | Burst size for temporary spikes | `20` |
 | `replicaCount` | Number of operator replicas | `1` |
 | `resources.limits.cpu` | CPU limit | `200m` |
 | `resources.limits.memory` | Memory limit | `256Mi` |
@@ -101,6 +103,9 @@ spec:
   credentialsSecretRef:
     name: obsyk-credentials
   syncInterval: "5m"
+  rateLimit:                    # Optional: rate limiting for event streaming
+    eventsPerSecond: 10         # Max events/sec (1-1000, default: 10)
+    burstSize: 20               # Burst allowance (1-1000, default: 20)
 ```
 
 ### Credentials Secret Format
@@ -228,6 +233,19 @@ Download from the [Releases page](https://github.com/Obsyk/obsyk-operator/releas
 ### Vulnerability Scanning
 
 Container images are scanned with [Trivy](https://trivy.dev/) on each release. Critical and high severity vulnerabilities are reported to GitHub Security.
+### Rate limiting for large clusters
+
+For clusters with high pod churn, you may want to adjust the rate limit to balance between real-time updates and platform load:
+
+```bash
+# Increase rate limit for faster sync in large clusters
+helm upgrade obsyk-operator obsyk/obsyk-operator \
+  --namespace obsyk-system \
+  --set agent.rateLimit.eventsPerSecond=50 \
+  --set agent.rateLimit.burstSize=100
+```
+
+The default rate limit (10 events/sec, burst 20) works well for most clusters. Increase if you see events being delayed during high activity periods.
 
 ## Uninstall
 
