@@ -201,7 +201,7 @@ func TestReconciler_ConcurrentDeleteAndCreate(t *testing.T) {
 				case <-ctx.Done():
 					return
 				default:
-					reconciler.getOrCreateAgentClient(context.Background(), agent)
+					_, _ = reconciler.getOrCreateAgentClient(context.Background(), agent)
 				}
 			}
 		}()

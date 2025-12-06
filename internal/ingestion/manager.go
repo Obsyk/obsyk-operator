@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/obsyk/obsyk-operator/internal/transport"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -322,12 +321,4 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 	}
 
 	return payload, nil
-}
-
-// getNamespaceInfo extracts namespace info from a runtime.Object.
-func getNamespaceInfo(obj interface{}) *corev1.Namespace {
-	if ns, ok := obj.(*corev1.Namespace); ok {
-		return ns
-	}
-	return nil
 }

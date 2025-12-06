@@ -4,6 +4,7 @@
 package ingestion
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -38,7 +39,7 @@ func TestNamespaceIngester_OnAdd(t *testing.T) {
 		},
 	}
 
-	_, err := clientset.CoreV1().Namespaces().Create(nil, ns, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create namespace: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestNamespaceIngester_OnUpdate(t *testing.T) {
 	updatedNS.ResourceVersion = "2"
 	updatedNS.Labels = map[string]string{"updated": "true"}
 
-	_, err := clientset.CoreV1().Namespaces().Update(nil, updatedNS, metav1.UpdateOptions{})
+	_, err := clientset.CoreV1().Namespaces().Update(context.TODO(), updatedNS, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("failed to update namespace: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestNamespaceIngester_OnDelete(t *testing.T) {
 	}
 
 	// Delete the namespace
-	err := clientset.CoreV1().Namespaces().Delete(nil, "test-ns", metav1.DeleteOptions{})
+	err := clientset.CoreV1().Namespaces().Delete(context.TODO(), "test-ns", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("failed to delete namespace: %v", err)
 	}
@@ -199,7 +200,7 @@ func TestNamespaceIngester_ClusterScoped(t *testing.T) {
 		},
 	}
 
-	_, err := clientset.CoreV1().Namespaces().Create(nil, ns, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create namespace: %v", err)
 	}

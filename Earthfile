@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0.
 
 VERSION 0.8
-FROM golang:1.23-alpine
+FROM golang:1.24-alpine
 WORKDIR /workspace
 
 # Base image with Go tools

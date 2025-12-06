@@ -10,7 +10,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.24+
 - Earthly
 - Docker (OrbStack recommended for Mac)
 - kubectl

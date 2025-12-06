@@ -1,0 +1,17 @@
+# kube-linter configuration
+# https://docs.kubelinter.io/#/configuring-kubelinter
+
+checks:
+  # Enable all default checks
+  addAllBuiltIn: true
+
+  # Exclude checks that don't apply to our use case
+  exclude:
+    # We intentionally don't set CPU limits to avoid throttling
+    # Memory limits are set, which is the important one
+    - "unset-cpu-requirements"
+
+    # CRD doesn't need all pod security fields
+    - "no-read-only-root-fs"  # Only for pods, not CRDs
+
+customChecks: []
