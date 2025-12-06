@@ -20,6 +20,8 @@ jobs:
       contents: write
       packages: write
       security-events: write
+      id-token: write      # For OIDC keyless signing with Sigstore
+      attestations: write  # For GitHub artifact attestations
 
     steps:
       - name: Checkout
@@ -57,6 +59,31 @@ jobs:
 
       - name: Build and push Docker image
         run: earthly --push +docker --VERSION=${{ steps.version.outputs.tag }}
+
+      - name: Get image digest
+        id: digest
+        run: |
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }} | cut -d'@' -f2)
+          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+          echo "Image digest: ${DIGEST}"
+
+      # Container Image Signing with Sigstore Cosign (keyless)
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign container image
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.digest.outputs.digest }}
+
+      # SLSA Provenance Attestation
+      - name: Generate SLSA provenance attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
