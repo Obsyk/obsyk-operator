@@ -47,16 +47,22 @@ podAnnotations: {}
 
 podSecurityContext:
   runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
   seccompProfile:
     type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
+  privileged: false
   capabilities:
     drop:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
 
 resources:
   limits:
@@ -84,3 +90,29 @@ metrics:
 # Health probe configuration
 healthProbe:
   port: 8081
+
+# NetworkPolicy configuration
+# Enable for enterprise environments with strict egress policies
+networkPolicy:
+  enabled: false
+  # Optional: CIDR for Kubernetes API server (auto-detected if not set)
+  # kubeAPIServerCIDR: "10.0.0.1/32"
+  # Optional: CIDR for Obsyk platform (allows all external HTTPS if not set)
+  # platformCIDR: "0.0.0.0/0"
+  # Metrics scraping namespace selector
+  metrics:
+    namespaceSelector: {}
+    # Example: Only allow prometheus namespace
+    # namespaceSelector:
+    #   matchLabels:
+    #     name: monitoring
+
+# PodDisruptionBudget configuration
+# Recommended when running multiple replicas
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1  # Alternative to minAvailable
+
+# Priority class for critical workloads
+# priorityClassName: ""

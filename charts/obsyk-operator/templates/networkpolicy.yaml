@@ -1,0 +1,80 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "obsyk-operator.fullname" . }}
+  labels:
+    {{- include "obsyk-operator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "obsyk-operator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow metrics scraping (Prometheus)
+    {{- if .Values.metrics.enabled }}
+    - from:
+        {{- if .Values.networkPolicy.metrics.namespaceSelector }}
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.metrics.namespaceSelector | nindent 12 }}
+        {{- else }}
+        - namespaceSelector: {}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.metrics.port }}
+    {{- end }}
+    # Allow health probes
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.healthProbe.port }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Kubernetes API server
+    - to:
+        {{- if .Values.networkPolicy.kubeAPIServerCIDR }}
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.kubeAPIServerCIDR }}
+        {{- else }}
+        # If not specified, allow all (API server IP varies by cluster)
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    # Allow Obsyk platform
+    - to:
+        {{- if .Values.networkPolicy.platformCIDR }}
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.platformCIDR }}
+        {{- else }}
+        # Allow all external HTTPS (platform URL resolved dynamically)
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

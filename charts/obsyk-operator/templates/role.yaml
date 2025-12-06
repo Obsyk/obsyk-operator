@@ -1,0 +1,21 @@
+# Namespace-scoped Role for secret access (least privilege)
+# This limits secret access to only the operator's namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "obsyk-operator.fullname" . }}-secret-reader
+  labels:
+    {{- include "obsyk-operator.labels" . | nindent 4 }}
+rules:
+  # Secret access restricted to operator namespace only
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    {{- if .Values.agent.credentialsSecretRef.name }}
+    resourceNames:
+      - {{ .Values.agent.credentialsSecretRef.name }}
+    {{- end }}
+    verbs:
+      - get
+      - watch
