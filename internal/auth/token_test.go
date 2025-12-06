@@ -219,7 +219,7 @@ func TestTokenManager_GetAccessToken(t *testing.T) {
 			ExpiresIn:   3600,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -266,7 +266,7 @@ func TestTokenManager_TokenRefresh(t *testing.T) {
 			ExpiresIn:   1, // 1 second expiry
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -307,7 +307,7 @@ func TestTokenManager_UpdateCredentials(t *testing.T) {
 			TokenType:   "Bearer",
 			ExpiresIn:   3600,
 		}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
