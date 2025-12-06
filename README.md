@@ -153,6 +153,64 @@ The operator requires **read-only** access to cluster resources:
 - Keys are read at runtime and never logged
 - All API communication uses TLS
 
+## Service Mesh Compatibility
+
+The operator works with common service meshes. Here's how to configure them:
+
+### Istio
+
+The operator works out of the box with Istio. For automatic sidecar injection, ensure the namespace is labeled:
+
+```bash
+kubectl label namespace obsyk-system istio-injection=enabled
+```
+
+If you need to exclude the operator from sidecar injection (e.g., for troubleshooting), add the annotation to the Helm values:
+
+```yaml
+podAnnotations:
+  sidecar.istio.io/inject: "false"
+```
+
+#### mTLS Configuration
+
+For strict mTLS environments, create a PeerAuthentication policy:
+
+```yaml
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: obsyk-operator-mtls
+  namespace: obsyk-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: obsyk-operator
+  mtls:
+    mode: STRICT
+```
+
+The operator's outbound connections to the Obsyk platform use TLS and work correctly with Istio's egress policies.
+
+### Linkerd
+
+The operator is compatible with Linkerd. To enable automatic proxy injection:
+
+```bash
+kubectl annotate namespace obsyk-system linkerd.io/inject=enabled
+```
+
+Or via Helm values:
+
+```yaml
+podAnnotations:
+  linkerd.io/inject: enabled
+```
+
+For Linkerd's default-deny policies, ensure the operator can reach:
+- Kubernetes API server (in-cluster)
+- Obsyk platform (external HTTPS on port 443)
+
 ## Observability
 
 ### Status Conditions
