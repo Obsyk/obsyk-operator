@@ -54,15 +54,8 @@ rules:
     verbs:
       - list
       - watch
-  # Secret access for API key
-  - apiGroups:
-      - ""
-    resources:
-      - secrets
-    verbs:
-      - get
-      - list
-      - watch
+  # Note: Secret access is granted via Role (namespace-scoped) for least privilege
+  # See role.yaml for secret access in the operator namespace only
   # Leader election
   - apiGroups:
       - coordination.k8s.io

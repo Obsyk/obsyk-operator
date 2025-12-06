@@ -21,6 +21,10 @@ spec:
         {{- include "obsyk-operator.selectorLabels" . | nindent 8 }}
         control-plane: controller-manager
     spec:
+      # Explicit host isolation for policy engine compliance (Kyverno, OPA)
+      hostNetwork: false
+      hostPID: false
+      hostIPC: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -74,3 +78,6 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       terminationGracePeriodSeconds: 10
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}

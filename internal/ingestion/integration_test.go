@@ -566,7 +566,7 @@ func TestIntegration_MultipleIngestersNoDeadlock(t *testing.T) {
 					UID:  types.UID("dl-ns-uid-" + string(rune('0'+idx))),
 				},
 			}
-			clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+			_, _ = clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
 		}()
 
 		go func() {
@@ -578,7 +578,7 @@ func TestIntegration_MultipleIngestersNoDeadlock(t *testing.T) {
 					UID:       types.UID("dl-pod-uid-" + string(rune('0'+idx))),
 				},
 			}
-			clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+			_, _ = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 		}()
 
 		go func() {
@@ -590,7 +590,7 @@ func TestIntegration_MultipleIngestersNoDeadlock(t *testing.T) {
 					UID:       types.UID("dl-svc-uid-" + string(rune('0'+idx))),
 				},
 			}
-			clientset.CoreV1().Services("default").Create(ctx, svc, metav1.CreateOptions{})
+			_, _ = clientset.CoreV1().Services("default").Create(ctx, svc, metav1.CreateOptions{})
 		}()
 	}
 
