@@ -393,3 +393,52 @@ func (r *ObsykAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Complete(r)
 }
+
+// CheckPlatformHealth returns nil if all agent clients are healthy,
+// or an error if any client is unhealthy.
+// This is intended for use with Kubernetes health probes.
+func (r *ObsykAgentReconciler) CheckPlatformHealth() error {
+	r.agentClientsMu.RLock()
+	defer r.agentClientsMu.RUnlock()
+
+	// If no agents configured, consider healthy (operator is running)
+	if len(r.agentClients) == 0 {
+		return nil
+	}
+
+	// Check health of all agent clients
+	for key, ac := range r.agentClients {
+		if !ac.transport.IsHealthy() {
+			status := ac.transport.GetHealthStatus()
+			if status.LastError != nil {
+				return fmt.Errorf("agent %s unhealthy: %v", key, status.LastError)
+			}
+			return fmt.Errorf("agent %s unhealthy: no successful connection yet", key)
+		}
+	}
+
+	return nil
+}
+
+// CheckReady returns nil if the reconciler has successfully synced at least once,
+// or an error if no initial sync has completed.
+// This is intended for use with Kubernetes readiness probes.
+func (r *ObsykAgentReconciler) CheckReady() error {
+	r.agentClientsMu.RLock()
+	defer r.agentClientsMu.RUnlock()
+
+	// If no agents configured, consider ready (operator is running)
+	if len(r.agentClients) == 0 {
+		return nil
+	}
+
+	// Check that at least one agent has completed initial sync
+	for _, ac := range r.agentClients {
+		status := ac.transport.GetHealthStatus()
+		if !status.LastHealthyTime.IsZero() {
+			return nil // At least one agent has synced
+		}
+	}
+
+	return fmt.Errorf("no agents have completed initial sync")
+}
