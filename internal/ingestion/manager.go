@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/obsyk/obsyk-operator/internal/transport"
+	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -26,6 +27,12 @@ const (
 
 	// eventProcessTimeout is the timeout for processing a single event.
 	eventProcessTimeout = 30 * time.Second
+
+	// DefaultEventsPerSecond is the default rate limit for sending events.
+	DefaultEventsPerSecond = 10.0
+
+	// DefaultBurstSize is the default burst size for rate limiting.
+	DefaultBurstSize = 20
 )
 
 // Manager coordinates resource ingestion from Kubernetes and sends events to the platform.
@@ -40,6 +47,9 @@ type Manager struct {
 
 	// Event channel for aggregating events from all ingesters
 	eventChan chan ResourceEvent
+
+	// Rate limiter for sending events to the platform
+	limiter *rate.Limiter
 
 	// Individual ingesters
 	podIngester       *PodIngester
@@ -61,11 +71,24 @@ func NewManager(clientset kubernetes.Interface, cfg ManagerConfig, log logr.Logg
 		bufferSize = DefaultEventBufferSize
 	}
 
+	// Configure rate limiter
+	eventsPerSecond := DefaultEventsPerSecond
+	burstSize := DefaultBurstSize
+	if cfg.RateLimit != nil {
+		if cfg.RateLimit.EventsPerSecond > 0 {
+			eventsPerSecond = cfg.RateLimit.EventsPerSecond
+		}
+		if cfg.RateLimit.BurstSize > 0 {
+			burstSize = cfg.RateLimit.BurstSize
+		}
+	}
+
 	return &Manager{
 		config:    cfg,
 		log:       log.WithName("ingestion-manager"),
 		clientset: clientset,
 		eventChan: make(chan ResourceEvent, bufferSize),
+		limiter:   rate.NewLimiter(rate.Limit(eventsPerSecond), burstSize),
 	}
 }
 
@@ -237,8 +260,20 @@ func (m *Manager) drainEvents() {
 	}
 }
 
-// sendEvent sends a single event to the platform.
+// sendEvent sends a single event to the platform with rate limiting.
 func (m *Manager) sendEvent(ctx context.Context, event ResourceEvent) {
+	// Wait for rate limiter before sending
+	if err := m.limiter.Wait(ctx); err != nil {
+		// Context cancelled during rate limit wait
+		m.log.V(1).Info("rate limit wait cancelled",
+			"type", event.Type,
+			"kind", event.Kind,
+			"name", event.Name,
+			"namespace", event.Namespace,
+			"error", err.Error())
+		return
+	}
+
 	sendCtx, cancel := context.WithTimeout(ctx, eventProcessTimeout)
 	defer cancel()
 

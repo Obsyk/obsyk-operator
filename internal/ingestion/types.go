@@ -36,6 +36,17 @@ type ResourceEvent struct {
 	Object interface{}
 }
 
+// RateLimitConfig holds rate limiting configuration.
+type RateLimitConfig struct {
+	// EventsPerSecond is the maximum number of events to send per second.
+	// Defaults to 10 if not set or <= 0.
+	EventsPerSecond float64
+
+	// BurstSize is the maximum burst size for rate limiting.
+	// Defaults to 20 if not set or <= 0.
+	BurstSize int
+}
+
 // ManagerConfig holds configuration for creating an IngestionManager.
 type ManagerConfig struct {
 	// ClusterUID is the unique cluster identifier.
@@ -47,6 +58,10 @@ type ManagerConfig struct {
 	// EventBufferSize is the size of the event buffer channel.
 	// Defaults to 1000 if not set.
 	EventBufferSize int
+
+	// RateLimit configures rate limiting for sending events.
+	// If nil, default values are used.
+	RateLimit *RateLimitConfig
 }
 
 // IngesterConfig holds common configuration for individual ingesters.

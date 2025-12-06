@@ -147,6 +147,9 @@ spec:
   credentialsSecretRef:
     name: obsyk-credentials                # OAuth2 credentials secret
   syncInterval: "5m"                       # Heartbeat interval
+  rateLimit:                               # Optional: rate limiting config
+    eventsPerSecond: 10                    # Default: 10, range: 1-1000
+    burstSize: 20                          # Default: 20, range: 1-1000
 status:
   clusterUID: "abc123-def456"              # Auto-detected from kube-system
   conditions:
@@ -198,6 +201,7 @@ Event-driven resource watching using SharedInformerFactory:
 - Creates and manages SharedInformerFactory
 - Coordinates Pod, Service, Namespace ingesters
 - Event channel with configurable buffer (default: 1000)
+- Rate limiting for event sending (token bucket algorithm, default: 10/sec, burst: 20)
 - Graceful shutdown with event draining
 
 **Ingesters** (pod/service/namespace_ingester.go):
@@ -217,6 +221,9 @@ K8s API Server ──watch──▶ SharedInformer ──▶ Ingester.OnAdd/Upda
                                                         │
                                                         ▼
                                                Event Processor Goroutine
+                                                        │
+                                                        ▼
+                                               Rate Limiter (token bucket)
                                                         │
                                                         ▼
                                                transport.Client.SendEvent()
