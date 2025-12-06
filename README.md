@@ -224,7 +224,9 @@ kubectl delete namespace obsyk-system
 
 ## Development
 
-See [CLAUDE.md](./CLAUDE.md) for development instructions.
+- **Development Guide**: [CLAUDE.md](./CLAUDE.md) - Architecture, build commands, coding conventions
+- **Contributing**: [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute to this project
+- **Changelog**: [CHANGELOG.md](./CHANGELOG.md) - Version history and release notes
 
 ## License
 
