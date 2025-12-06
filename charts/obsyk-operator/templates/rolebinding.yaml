@@ -1,0 +1,15 @@
+# Namespace-scoped RoleBinding for secret access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "obsyk-operator.fullname" . }}-secret-reader
+  labels:
+    {{- include "obsyk-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "obsyk-operator.fullname" . }}-secret-reader
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "obsyk-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

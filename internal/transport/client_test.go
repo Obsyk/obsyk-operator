@@ -82,7 +82,7 @@ func TestClient_SendSnapshot(t *testing.T) {
 
 				w.WriteHeader(tt.serverResponse)
 				if tt.serverBody != "" {
-					w.Write([]byte(tt.serverBody))
+					_, _ = w.Write([]byte(tt.serverBody))
 				}
 			}))
 			defer server.Close()
@@ -199,7 +199,7 @@ func TestClient_RetryOnServerError(t *testing.T) {
 		if count < 3 {
 			// Return server error for first 2 attempts
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("server error"))
+			_, _ = w.Write([]byte("server error"))
 			return
 		}
 		// Success on 3rd attempt
@@ -235,7 +235,7 @@ func TestClient_NoRetryOnClientError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad request"))
+		_, _ = w.Write([]byte("bad request"))
 	}))
 	defer server.Close()
 
@@ -310,14 +310,14 @@ func TestClient_UpdateTokenProvider(t *testing.T) {
 	}
 
 	// First request with old token
-	client.SendHeartbeat(context.Background(), payload)
+	_ = client.SendHeartbeat(context.Background(), payload)
 	if receivedKey != "Bearer old-token" {
 		t.Errorf("expected old token, got %s", receivedKey)
 	}
 
 	// Update token provider and send again
 	client.UpdateTokenProvider(&mockTokenProvider{token: "new-token"})
-	client.SendHeartbeat(context.Background(), payload)
+	_ = client.SendHeartbeat(context.Background(), payload)
 	if receivedKey != "Bearer new-token" {
 		t.Errorf("expected new token, got %s", receivedKey)
 	}
@@ -406,7 +406,7 @@ func TestClient_ConcurrentUpdateTokenProvider(t *testing.T) {
 				case <-ctx.Done():
 					return
 				default:
-					client.SendHeartbeat(context.Background(), payload)
+					_ = client.SendHeartbeat(context.Background(), payload)
 				}
 			}
 		}()
@@ -475,7 +475,7 @@ func TestClient_ConcurrentMixedOperations(t *testing.T) {
 				ClusterUID:  "test-uid",
 				ClusterName: "test-cluster",
 			}
-			client.SendSnapshot(context.Background(), payload)
+			_ = client.SendSnapshot(context.Background(), payload)
 		}()
 	}
 
@@ -489,7 +489,7 @@ func TestClient_ConcurrentMixedOperations(t *testing.T) {
 				Type:       "added",
 				Kind:       "Pod",
 			}
-			client.SendEvent(context.Background(), payload)
+			_ = client.SendEvent(context.Background(), payload)
 		}()
 	}
 
@@ -502,7 +502,7 @@ func TestClient_ConcurrentMixedOperations(t *testing.T) {
 				ClusterUID:   "test-uid",
 				AgentVersion: "0.1.0",
 			}
-			client.SendHeartbeat(context.Background(), payload)
+			_ = client.SendHeartbeat(context.Background(), payload)
 		}()
 	}
 

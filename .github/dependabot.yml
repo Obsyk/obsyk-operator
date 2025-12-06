@@ -1,0 +1,48 @@
+# Dependabot configuration
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
+version: 2
+updates:
+  # Go modules - weekly updates, grouped to reduce PR noise
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      # Group all non-security updates together
+      go-dependencies:
+        patterns: ["*"]
+        exclude-patterns: ["k8s.io/*", "sigs.k8s.io/*"]
+      # Keep Kubernetes dependencies separate (often need careful testing)
+      kubernetes:
+        patterns: ["k8s.io/*", "sigs.k8s.io/*"]
+    commit-message:
+      prefix: "deps"
+    labels:
+      - "dependencies"
+      - "go"
+
+  # GitHub Actions - weekly updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  # Docker base images - weekly updates
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "docker"
+    labels:
+      - "dependencies"
+      - "docker"

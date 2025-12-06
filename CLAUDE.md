@@ -10,7 +10,7 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 
 ## Tech Stack
 
-- **Language**: Go 1.23+
+- **Language**: Go 1.24+
 - **Framework**: Kubebuilder v4 (controller-runtime)
 - **Build**: Earthly (containerized builds)
 - **Installation**: Helm chart
@@ -294,7 +294,7 @@ earthly +manifests
 ## Local Development
 
 ### Prerequisites
-- Go 1.23+
+- Go 1.24+
 - Earthly
 - Docker (OrbStack recommended for Mac)
 - kubectl configured to a test cluster

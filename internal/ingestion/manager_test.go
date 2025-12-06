@@ -12,7 +12,6 @@ import (
 	"github.com/obsyk/obsyk-operator/internal/transport"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -351,11 +350,4 @@ func TestResourceEventStruct(t *testing.T) {
 	if event.Kind != transport.ResourceTypePod {
 		t.Errorf("Kind = %v, want %v", event.Kind, transport.ResourceTypePod)
 	}
-}
-
-// fakeScheme returns a scheme with core types registered
-func fakeScheme() *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	return scheme
 }
