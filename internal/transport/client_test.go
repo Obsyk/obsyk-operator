@@ -502,7 +502,7 @@ func TestClient_ConcurrentMixedOperations(t *testing.T) {
 				ClusterUID:   "test-uid",
 				AgentVersion: "0.1.0",
 			}
-			client.SendHeartbeat(context.Background(), payload)
+			_ = client.SendHeartbeat(context.Background(), payload)
 		}()
 	}
 
