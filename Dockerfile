@@ -3,8 +3,8 @@
 
 # Build stage
 # Pinned digest for supply chain security (update periodically)
-# To update: docker manifest inspect golang:1.23-alpine | jq '.manifests[] | select(.platform.architecture=="amd64")'
-FROM golang:1.23-alpine@sha256:a7ecaac5efda22510d8c903bdc6b19026543f1eac3317d47363680df22161bd8 AS builder
+# To update: docker manifest inspect golang:1.24-alpine | jq '.manifests[] | select(.platform.architecture=="amd64")'
+FROM golang:1.24-alpine@sha256:220ff7b89e6d3da59b1e24d985cd48a19851341f000d81a7a379dd7c02a764ce AS builder
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 
