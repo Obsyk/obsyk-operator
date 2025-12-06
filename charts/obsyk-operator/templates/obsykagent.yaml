@@ -14,4 +14,9 @@ spec:
   credentialsSecretRef:
     name: {{ .Values.agent.credentialsSecretRef.name | quote }}
   syncInterval: {{ .Values.agent.syncInterval | quote }}
+  {{- if .Values.agent.rateLimit }}
+  rateLimit:
+    eventsPerSecond: {{ .Values.agent.rateLimit.eventsPerSecond | default 10 }}
+    burstSize: {{ .Values.agent.rateLimit.burstSize | default 20 }}
+  {{- end }}
 {{- end }}
