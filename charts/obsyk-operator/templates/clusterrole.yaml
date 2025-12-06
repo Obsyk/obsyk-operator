@@ -69,3 +69,11 @@ rules:
       - patch
       - update
       - watch
+  # Events for leader election announcements
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
