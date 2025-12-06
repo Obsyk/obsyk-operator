@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -319,5 +320,201 @@ func TestClient_UpdateTokenProvider(t *testing.T) {
 	client.SendHeartbeat(context.Background(), payload)
 	if receivedKey != "Bearer new-token" {
 		t.Errorf("expected new token, got %s", receivedKey)
+	}
+}
+
+// TestClient_ConcurrentSendEvent tests concurrent SendEvent calls for thread-safety.
+func TestClient_ConcurrentSendEvent(t *testing.T) {
+	var requestCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		// Small delay to increase chance of race conditions
+		time.Sleep(time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	numGoroutines := 50
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			payload := &EventPayload{
+				ClusterUID: "test-uid",
+				Type:       "added",
+				Kind:       "Pod",
+				UID:        "pod-uid-" + string(rune('0'+idx%10)),
+				Name:       "test-pod",
+				Namespace:  "default",
+			}
+			err := client.SendEvent(context.Background(), payload)
+			if err != nil {
+				t.Errorf("SendEvent failed: %v", err)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	if atomic.LoadInt32(&requestCount) != int32(numGoroutines) {
+		t.Errorf("expected %d requests, got %d", numGoroutines, requestCount)
+	}
+}
+
+// TestClient_ConcurrentUpdateTokenProvider tests concurrent token provider updates
+// while sending requests. This verifies thread-safety of UpdateTokenProvider.
+func TestClient_ConcurrentUpdateTokenProvider(t *testing.T) {
+	var requestCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "initial-token"},
+		Logger:        logr.Discard(),
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	// Start goroutines that continuously send events
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload := &HeartbeatPayload{
+				ClusterUID:   "test-uid",
+				AgentVersion: "0.1.0",
+			}
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					client.SendHeartbeat(context.Background(), payload)
+				}
+			}
+		}()
+	}
+
+	// Concurrently update token provider
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					client.UpdateTokenProvider(&mockTokenProvider{
+						token: "token-" + string(rune('0'+idx)),
+					})
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Should have successfully processed many requests without race conditions
+	if atomic.LoadInt32(&requestCount) == 0 {
+		t.Error("expected requests to be processed")
+	}
+	t.Logf("processed %d requests during concurrent updates", requestCount)
+}
+
+// TestClient_ConcurrentMixedOperations tests all operations running concurrently.
+func TestClient_ConcurrentMixedOperations(t *testing.T) {
+	var snapshotCount, eventCount, heartbeatCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case endpointSnapshot:
+			atomic.AddInt32(&snapshotCount, 1)
+		case endpointEvents:
+			atomic.AddInt32(&eventCount, 1)
+		case endpointHeartbeat:
+			atomic.AddInt32(&heartbeatCount, 1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	var wg sync.WaitGroup
+	numEach := 20
+
+	// Concurrent snapshots
+	for i := 0; i < numEach; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload := &SnapshotPayload{
+				ClusterUID:  "test-uid",
+				ClusterName: "test-cluster",
+			}
+			client.SendSnapshot(context.Background(), payload)
+		}()
+	}
+
+	// Concurrent events
+	for i := 0; i < numEach; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload := &EventPayload{
+				ClusterUID: "test-uid",
+				Type:       "added",
+				Kind:       "Pod",
+			}
+			client.SendEvent(context.Background(), payload)
+		}()
+	}
+
+	// Concurrent heartbeats
+	for i := 0; i < numEach; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload := &HeartbeatPayload{
+				ClusterUID:   "test-uid",
+				AgentVersion: "0.1.0",
+			}
+			client.SendHeartbeat(context.Background(), payload)
+		}()
+	}
+
+	wg.Wait()
+
+	if atomic.LoadInt32(&snapshotCount) != int32(numEach) {
+		t.Errorf("expected %d snapshots, got %d", numEach, snapshotCount)
+	}
+	if atomic.LoadInt32(&eventCount) != int32(numEach) {
+		t.Errorf("expected %d events, got %d", numEach, eventCount)
+	}
+	if atomic.LoadInt32(&heartbeatCount) != int32(numEach) {
+		t.Errorf("expected %d heartbeats, got %d", numEach, heartbeatCount)
 	}
 }
