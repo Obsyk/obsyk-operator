@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -41,11 +42,14 @@ type TokenProvider interface {
 }
 
 // Client handles HTTP communication with the Obsyk platform.
+// Client is safe for concurrent use by multiple goroutines.
 type Client struct {
-	httpClient    *http.Client
-	platformURL   string
+	httpClient  *http.Client
+	platformURL string
+	log         logr.Logger
+
+	mu            sync.RWMutex // Protects tokenProvider
 	tokenProvider TokenProvider
-	log           logr.Logger
 }
 
 // ClientConfig holds configuration for creating a new Client.
@@ -74,7 +78,10 @@ func NewClient(cfg ClientConfig) *Client {
 }
 
 // UpdateTokenProvider updates the token provider used for authentication.
+// This method is safe for concurrent use.
 func (c *Client) UpdateTokenProvider(provider TokenProvider) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.tokenProvider = provider
 }
 
@@ -136,8 +143,13 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 
 // send performs the actual HTTP request.
 func (c *Client) send(ctx context.Context, endpoint string, payload interface{}) error {
-	// Get access token
-	accessToken, err := c.tokenProvider.GetAccessToken(ctx)
+	// Get token provider (protected by mutex)
+	c.mu.RLock()
+	tokenProvider := c.tokenProvider
+	c.mu.RUnlock()
+
+	// Get access token (TokenManager is thread-safe)
+	accessToken, err := tokenProvider.GetAccessToken(ctx)
 	if err != nil {
 		return fmt.Errorf("getting access token: %w", err)
 	}

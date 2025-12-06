@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,7 +43,8 @@ type ObsykAgentReconciler struct {
 	Scheme *runtime.Scheme
 
 	// agentClients holds a client per ObsykAgent (keyed by namespace/name).
-	agentClients map[string]*agentClient
+	agentClients   map[string]*agentClient
+	agentClientsMu sync.RWMutex // Protects agentClients map
 
 	// httpClient is shared across all token managers
 	httpClient *http.Client
@@ -77,7 +79,9 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if err := r.Get(ctx, req.NamespacedName, agent); err != nil {
 		if errors.IsNotFound(err) {
 			// Object deleted, clean up client
+			r.agentClientsMu.Lock()
 			delete(r.agentClients, req.String())
+			r.agentClientsMu.Unlock()
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -164,15 +168,28 @@ func (r *ObsykAgentReconciler) getOrCreateAgentClient(ctx context.Context, agent
 	key := fmt.Sprintf("%s/%s", agent.Namespace, agent.Name)
 	logger := log.FromContext(ctx)
 
-	// Get credentials from secret
+	// Get credentials from secret (done outside lock to avoid holding lock during I/O)
 	creds, err := r.getCredentials(ctx, agent)
 	if err != nil {
 		return nil, fmt.Errorf("getting credentials: %w", err)
 	}
 
-	// Check if client exists
+	// Check if client exists (fast path with read lock)
+	r.agentClientsMu.RLock()
 	if ac, ok := r.agentClients[key]; ok {
-		// Update credentials in case they changed
+		r.agentClientsMu.RUnlock()
+		// Update credentials in case they changed (TokenManager is thread-safe)
+		ac.tokenManager.UpdateCredentials(creds)
+		return ac, nil
+	}
+	r.agentClientsMu.RUnlock()
+
+	// Slow path: need to create client (write lock)
+	r.agentClientsMu.Lock()
+	defer r.agentClientsMu.Unlock()
+
+	// Double-check in case another goroutine created it while we waited for the lock
+	if ac, ok := r.agentClients[key]; ok {
 		ac.tokenManager.UpdateCredentials(creds)
 		return ac, nil
 	}
