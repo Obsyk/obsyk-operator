@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services) to the Obsyk SaaS platform.
+Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services) to the Obsyk SaaS platform using event-driven delta streaming.
 
 **This is a public repository** - customers install this operator in their Kubernetes clusters.
 
@@ -16,50 +16,124 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 - **Installation**: Helm chart
 - **CI/CD**: GitHub Actions
 - **Container Registry**: GHCR (ghcr.io/obsyk/obsyk-operator)
-- **Testing**: Ginkgo/Gomega (controller-runtime standard), envtest
+- **Testing**: Standard Go testing with envtest for Kubernetes integration
 
 ## Repository Structure
 
 ```
 /api/
   /v1/
-    obsykagent_types.go      # CRD struct definitions
-    groupversion_info.go     # API group registration
+    obsykagent_types.go       # CRD struct definitions (ObsykAgent spec/status)
+    groupversion_info.go      # API group registration
+    zz_generated.deepcopy.go  # Generated deep copy methods
 /cmd/
-  /main.go                   # Operator entrypoint
+  main.go                     # Operator entrypoint
 /internal/
   /auth/
-    token.go                 # OAuth2 JWT Bearer authentication
-    token_test.go            # Auth tests
+    token.go                  # OAuth2 JWT Bearer token management (thread-safe)
+    token_test.go             # Token manager tests
   /controller/
-    obsykagent_controller.go # Main reconciliation logic
-    suite_test.go            # Controller tests
+    obsykagent_controller.go  # Main reconciliation logic (thread-safe)
+    obsykagent_controller_test.go  # Controller concurrency tests
+  /ingestion/
+    types.go                  # Event types, interfaces (ResourceEvent, EventSender)
+    manager.go                # IngestionManager - coordinates informers (thread-safe)
+    pod_ingester.go           # Pod SharedInformer event handler
+    service_ingester.go       # Service SharedInformer event handler
+    namespace_ingester.go     # Namespace SharedInformer event handler
+    *_test.go                 # Unit tests for each component
+    integration_test.go       # Integration tests with envtest
   /transport/
-    client.go                # HTTP client for platform communication
+    types.go                  # API payload types (SnapshotPayload, EventPayload)
+    client.go                 # HTTP client for platform communication (thread-safe)
+    client_test.go            # Client tests including concurrency tests
 /config/
-  /crd/                      # Generated CRD manifests
-  /rbac/                     # RBAC manifests (ClusterRole, etc.)
-  /manager/                  # Controller manager deployment
-  /default/                  # Kustomize default overlay
+  /crd/                       # Generated CRD manifests
+  /rbac/                      # RBAC manifests (ClusterRole, etc.)
+  /manager/                   # Controller manager deployment
+  /default/                   # Kustomize default overlay
+  /samples/                   # Sample CR files
 /charts/
-  /obsyk-operator/           # Helm chart
+  /obsyk-operator/            # Helm chart
     Chart.yaml
     values.yaml
-    templates/
+    /crds/                    # CRD YAML for Helm
+    /templates/               # Helm templates
 /.github/
   /workflows/
-    ci.yml                   # PR checks
-    release.yml              # Release automation
-    e2e.yml                  # E2E tests on Kind cluster
-/Earthfile                   # Earthly build definitions
-/Dockerfile                  # Runtime image (used by Earthly)
+    ci.yml                    # PR checks (lint, test, build)
+    release.yml               # Release automation
+    e2e.yml                   # E2E tests on Kind cluster
+/docs/
+  TEST_PLAN_GH11.md           # Event-driven streaming test plan
+/Earthfile                    # Earthly build definitions
+/Dockerfile                   # Runtime image (used by Earthly)
 ```
 
 ## Architecture
 
-### Custom Resource Definition (CRD)
+### High-Level Data Flow
 
-**ObsykAgent** - Single CRD to configure the agent:
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Kubernetes Cluster                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌──────────────┐    ┌──────────────────────────────────────────────┐   │
+│  │  kube-system │    │           obsyk-operator (Pod)                │   │
+│  │  (namespace) │    │  ┌────────────────────────────────────────┐  │   │
+│  │              │    │  │        ObsykAgentReconciler            │  │   │
+│  │  UID used as │───▶│  │  - Manages lifecycle                   │  │   │
+│  │  ClusterUID  │    │  │  - Creates IngestionManager            │  │   │
+│  └──────────────┘    │  │  - Handles initial snapshot            │  │   │
+│                      │  └────────────────────────────────────────┘  │   │
+│  ┌──────────────┐    │                    │                          │   │
+│  │   Secrets    │    │                    ▼                          │   │
+│  │              │    │  ┌────────────────────────────────────────┐  │   │
+│  │ client_id    │───▶│  │          IngestionManager              │  │   │
+│  │ private_key  │    │  │  ┌─────────────────────────────────┐   │  │   │
+│  └──────────────┘    │  │  │  SharedInformerFactory          │   │  │   │
+│                      │  │  │  (Pod, Service, Namespace)      │   │  │   │
+│  ┌──────────────┐    │  │  └─────────────────────────────────┘   │  │   │
+│  │  Pods        │    │  │                 │                      │  │   │
+│  │  Services    │◀───│  │                 ▼                      │  │   │
+│  │  Namespaces  │    │  │  ┌─────────────────────────────────┐   │  │   │
+│  │  (watched)   │    │  │  │  Event Channel (buffered)       │   │  │   │
+│  └──────────────┘    │  │  │  ResourceEvent{Type,Kind,UID,..}│   │  │   │
+│                      │  │  └─────────────────────────────────┘   │  │   │
+│                      │  │                 │                      │  │   │
+│                      │  │                 ▼                      │  │   │
+│                      │  │  ┌─────────────────────────────────┐   │  │   │
+│                      │  │  │  Event Processor (goroutine)    │   │  │   │
+│                      │  │  │  - Converts to EventPayload     │   │  │   │
+│                      │  │  │  - Sends via transport.Client   │   │  │   │
+│                      │  │  └─────────────────────────────────┘   │  │   │
+│                      │  └────────────────────────────────────────┘  │   │
+│                      │                    │                          │   │
+│                      │                    ▼                          │   │
+│                      │  ┌────────────────────────────────────────┐  │   │
+│                      │  │         transport.Client               │  │   │
+│                      │  │  - HTTP client with retry              │  │   │
+│                      │  │  - TokenManager for OAuth2             │  │   │
+│                      │  └────────────────────────────────────────┘  │   │
+│                      └──────────────────────────────────────────────┘   │
+│                                           │                              │
+└───────────────────────────────────────────│──────────────────────────────┘
+                                            │
+                                            ▼
+                              ┌──────────────────────────┐
+                              │    Obsyk Platform        │
+                              │                          │
+                              │  POST /oauth/token       │
+                              │  POST /api/v1/agent/*    │
+                              └──────────────────────────┘
+```
+
+### Component Details
+
+#### 1. ObsykAgent CRD (`api/v1/obsykagent_types.go`)
+
+The single Custom Resource that configures the agent:
 
 ```yaml
 apiVersion: obsyk.io/v1
@@ -68,17 +142,13 @@ metadata:
   name: obsyk-agent
   namespace: obsyk-system
 spec:
-  # Platform endpoint (Obsyk SaaS)
-  platformURL: "https://api.obsyk.ai"
-
-  # Logical cluster identifier
-  clusterName: "production-us-east-1"
-
-  # OAuth2 credentials stored in Secret (NEVER plain-text)
+  platformURL: "https://api.obsyk.ai"      # Platform endpoint
+  clusterName: "production-us-east-1"      # Human-friendly name
   credentialsSecretRef:
-    name: obsyk-credentials
+    name: obsyk-credentials                # OAuth2 credentials secret
+  syncInterval: "5m"                       # Heartbeat interval
 status:
-  clusterUID: "abc123-def456"  # Auto-detected from kube-system namespace
+  clusterUID: "abc123-def456"              # Auto-detected from kube-system
   conditions:
     - type: Available
       status: "True"
@@ -105,31 +175,93 @@ data:
   private_key: <base64-encoded PEM ECDSA P-256 private key>
 ```
 
-### Controller Logic
+#### 2. Controller (`internal/controller/obsykagent_controller.go`)
 
-1. **ClusterUID Detection**
-   - On startup, fetch the `kube-system` namespace UID
-   - This UID uniquely identifies the cluster across all Obsyk customers
-   - Stored in `status.clusterUID` and included in all API payloads
-   - Used by platform for multi-tenancy (same cluster name can exist in different orgs)
+The ObsykAgentReconciler manages the agent lifecycle:
 
-2. **Initialization (Snapshot)**
-   - On startup or CR creation, perform full List of Namespaces, Pods, Services
-   - Send bulk "Snapshot" payload to platform with `cluster_uid`
+**Thread-Safety:**
+- `agentClientsMu sync.RWMutex` protects the `agentClients` map
+- Uses double-checked locking in `getOrCreateAgentClient()` for optimal performance
+- Credentials fetched outside the lock to avoid I/O under mutex
 
-3. **Event-Driven Watch (Delta)**
-   - Use controller-runtime's `Watches()` (NOT manual client-go watcher loops)
-   - Implement custom EventHandler to capture resource changes
-   - Send "Event" payload (Added/Updated/Deleted) immediately
+**Key Methods:**
+- `Reconcile()` - Main reconciliation loop, handles create/update/delete
+- `getOrCreateAgentClient()` - Gets or creates transport client with OAuth2
+- `sendSnapshot()` - Sends full cluster state on initial sync
+- `sendHeartbeat()` - Periodic health check
 
-4. **Concurrency**
-   - Handle high event volume without blocking the work queue
-   - Use buffered channels or batch processing if needed
+#### 3. Ingestion Package (`internal/ingestion/`)
+
+Event-driven resource watching using SharedInformerFactory:
+
+**IngestionManager** (`manager.go`):
+- Creates and manages SharedInformerFactory
+- Coordinates Pod, Service, Namespace ingesters
+- Event channel with configurable buffer (default: 1000)
+- Graceful shutdown with event draining
+
+**Ingesters** (pod/service/namespace_ingester.go):
+- Implement `cache.ResourceEventHandler` interface
+- Non-blocking event sends (drop with warning if channel full)
+- Skip updates with same ResourceVersion (deduplication)
+
+**Event Flow:**
+```
+K8s API Server ──watch──▶ SharedInformer ──▶ Ingester.OnAdd/Update/Delete
+                                                        │
+                                                        ▼
+                                               ResourceEvent{Type, Kind, UID, ...}
+                                                        │
+                                                        ▼
+                                               Event Channel (buffered)
+                                                        │
+                                                        ▼
+                                               Event Processor Goroutine
+                                                        │
+                                                        ▼
+                                               transport.Client.SendEvent()
+```
+
+#### 4. Transport Package (`internal/transport/`)
+
+HTTP client for platform communication:
+
+**Client** (`client.go`):
+- Thread-safe with `sync.RWMutex` protecting `tokenProvider`
+- Retry with exponential backoff (5xx errors only)
+- Methods: `SendSnapshot()`, `SendEvent()`, `SendHeartbeat()`
+
+**Types** (`types.go`):
+- `SnapshotPayload` - Full cluster state
+- `EventPayload` - Single resource change (ADDED/UPDATED/DELETED)
+- `HeartbeatPayload` - Periodic health check
+- Helper functions: `NewPodInfo()`, `NewServiceInfo()`, `NewNamespaceInfo()`
+
+#### 5. Auth Package (`internal/auth/`)
+
+OAuth2 JWT Bearer authentication (RFC 7523):
+
+**TokenManager** (`token.go`):
+- Thread-safe with `sync.RWMutex`
+- Creates JWT assertions signed with ECDSA P-256 private key
+- Caches access tokens, refreshes before expiry
+- `UpdateCredentials()` for hot-reload from secret changes
+
+### Thread-Safety Patterns
+
+All major components are thread-safe:
+
+| Component | Protection | Pattern |
+|-----------|------------|---------|
+| `ObsykAgentReconciler.agentClients` | `sync.RWMutex` | Double-checked locking |
+| `transport.Client.tokenProvider` | `sync.RWMutex` | Lock on update, RLock on read |
+| `auth.TokenManager` | `sync.RWMutex` | Protects token cache and credentials |
+| `ingestion.Manager` | `sync.RWMutex` | Protects started state |
 
 ### Security Requirements
 
 - **RBAC**: Read-only access only (list, watch) for Pods, Services, Namespaces
-- **Credentials**: OAuth2 credentials (client_id, private_key) read from Secret at runtime
+- **Credentials**: OAuth2 credentials read from Secret at runtime, never from CR
 - **Private Key**: NEVER logged or exposed, stored only in Kubernetes Secret
 - **Token Management**: Access tokens cached in memory, refreshed before expiry
 - **Error Handling**: Exponential backoff for 5xx errors from platform
@@ -155,7 +287,7 @@ earthly +docker
 # Build and push Docker image
 earthly --push +docker --VERSION=v1.0.0
 
-# Generate CRD manifests (when implemented)
+# Generate CRD manifests
 earthly +manifests
 ```
 
@@ -187,12 +319,28 @@ kubectl apply -f config/samples/
 ### Testing
 
 ```bash
-# Unit tests
-earthly +test
+# All tests
+go test ./... -v
 
-# Run specific test locally
-go test ./internal/controller/... -v -run TestObsykAgentReconcile
+# With race detection (recommended)
+go test -race ./... -v
+
+# Specific package
+go test ./internal/controller/... -v
+
+# With coverage
+go test ./... -coverprofile=coverage.out
+go tool cover -html=coverage.out
 ```
+
+### Test Organization
+
+| Package | Test Files | Coverage Focus |
+|---------|------------|----------------|
+| `internal/auth` | `token_test.go` | JWT creation, token refresh, credentials parsing |
+| `internal/controller` | `obsykagent_controller_test.go` | Concurrent map access, reconcile lifecycle |
+| `internal/transport` | `client_test.go` | HTTP requests, retry logic, concurrent sends |
+| `internal/ingestion` | `*_test.go`, `integration_test.go` | Event handling, informer sync, graceful shutdown |
 
 ## License
 
@@ -207,7 +355,7 @@ Apache License 2.0 - This is a public repository for customer installation.
 
 ### General
 - All new code must include unit tests
-- Controller tests use envtest (fake K8s API server)
+- Use `-race` flag when testing concurrent code
 - No PR merges without passing CI
 
 ### Go
@@ -217,9 +365,55 @@ Apache License 2.0 - This is a public repository for customer installation.
 - Structured logging with controller-runtime's `logr`
 - Follow controller-runtime patterns and idioms
 
+### Thread-Safety Patterns
+
+**Double-checked locking for map access:**
+```go
+// Fast path - read lock
+r.mu.RLock()
+if val, ok := r.cache[key]; ok {
+    r.mu.RUnlock()
+    return val, nil
+}
+r.mu.RUnlock()
+
+// Slow path - write lock
+r.mu.Lock()
+defer r.mu.Unlock()
+
+// Double-check after acquiring write lock
+if val, ok := r.cache[key]; ok {
+    return val, nil
+}
+
+// Create new value
+val := createValue()
+r.cache[key] = val
+return val, nil
+```
+
+**Avoid I/O under lock:**
+```go
+// GOOD - fetch outside lock
+data, err := fetchData(ctx)  // I/O outside lock
+if err != nil {
+    return err
+}
+
+r.mu.Lock()
+r.cache[key] = data
+r.mu.Unlock()
+
+// BAD - I/O under lock
+r.mu.Lock()
+data, err := fetchData(ctx)  // Blocks other goroutines!
+r.cache[key] = data
+r.mu.Unlock()
+```
+
 ### Controller Patterns
 
-**Use Watches(), not manual informers:**
+**Use Watches(), not manual informers for reconciler triggers:**
 ```go
 // GOOD - Uses controller-runtime's declarative watch
 func (r *ObsykAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -228,9 +422,18 @@ func (r *ObsykAgentReconciler) SetupWithManager(mgr ctrl.Manager) error {
         Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.findAgentForPod)).
         Complete(r)
 }
+```
 
-// BAD - Manual client-go watcher loop
-// Don't do this - let controller-runtime manage the informer lifecycle
+**Use SharedInformerFactory for event streaming:**
+```go
+// GOOD - Efficient shared informers
+factory := informers.NewSharedInformerFactory(clientset, 0)
+podInformer := factory.Core().V1().Pods().Informer()
+podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+    AddFunc:    ingester.OnAdd,
+    UpdateFunc: ingester.OnUpdate,
+    DeleteFunc: ingester.OnDelete,
+})
 ```
 
 **Read credentials at runtime:**
@@ -297,7 +500,7 @@ cat private.pem | base64 | gh secret set E2E_PRIVATE_KEY
 ## Git Workflow
 
 - Trunk-based development
-- Short-lived feature branches → PR → squash merge to `main`
+- Short-lived feature branches -> PR -> squash merge to `main`
 - Releases via semantic versioning tags (v1.0.0)
 - Require PR reviews before merge
 
@@ -320,6 +523,7 @@ Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
 Examples:
 - `[GH-1] feat: add ObsykAgent CRD and controller scaffold`
 - `[GH-5] fix: handle secret not found error gracefully`
+- `[GH-12] feat: add thread-safety to transport client and controller`
 
 ## Platform Communication Protocol
 
@@ -343,9 +547,15 @@ Examples:
   "platform": "eks",
   "region": "us-east-1",
   "agent_version": "0.1.0",
-  "namespaces": [...],
-  "pods": [...],
-  "services": [...]
+  "namespaces": [
+    {"uid": "...", "name": "default", "labels": {...}, "phase": "Active"}
+  ],
+  "pods": [
+    {"uid": "...", "name": "nginx", "namespace": "default", "containers": [...]}
+  ],
+  "services": [
+    {"uid": "...", "name": "nginx-svc", "namespace": "default", "ports": [...]}
+  ]
 }
 ```
 
@@ -353,9 +563,12 @@ Examples:
 ```json
 {
   "cluster_uid": "abc123-def456",
-  "events": [
-    {"type": "added", "kind": "Pod", "uid": "...", "name": "...", "namespace": "...", "object": {...}}
-  ]
+  "type": "ADDED",
+  "kind": "Pod",
+  "uid": "pod-uid-123",
+  "name": "nginx",
+  "namespace": "default",
+  "object": {"uid": "...", "name": "nginx", ...}
 }
 ```
 
@@ -408,8 +621,10 @@ curl -X POST https://api.obsyk.ai/api/v1/agent/snapshot \
 ```
 
 ### Error Handling
-- 2xx: Success
-- 401: Authentication error (refresh token and retry once)
-- 4xx: Client error (log and don't retry)
-- 5xx: Server error (exponential backoff with jitter)
 
+| Status | Meaning | Action |
+|--------|---------|--------|
+| 2xx | Success | Continue |
+| 401 | Auth error | Refresh token and retry once |
+| 4xx | Client error | Log and don't retry |
+| 5xx | Server error | Exponential backoff with jitter (max 5 retries) |
