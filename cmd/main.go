@@ -64,8 +64,10 @@ func main() {
 	}
 
 	// Register ObsykAgent controller
+	// Pass APIReader for direct API calls (secrets) without cluster-wide caching
 	reconciler := controller.NewObsykAgentReconciler(
 		mgr.GetClient(),
+		mgr.GetAPIReader(),
 		mgr.GetScheme(),
 	)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
