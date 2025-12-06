@@ -5,6 +5,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,20 +64,40 @@ func main() {
 	}
 
 	// Register ObsykAgent controller
-	if err = controller.NewObsykAgentReconciler(
+	reconciler := controller.NewObsykAgentReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
-	).SetupWithManager(mgr); err != nil {
+	)
+	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ObsykAgent")
 		os.Exit(1)
 	}
 
+	// Basic health check - operator is running
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
+
+	// Platform connection health check
+	if err := mgr.AddHealthzCheck("platform", func(_ *http.Request) error {
+		return reconciler.CheckPlatformHealth()
+	}); err != nil {
+		setupLog.Error(err, "unable to set up platform health check")
+		os.Exit(1)
+	}
+
+	// Basic readiness check
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+
+	// Initial sync readiness check
+	if err := mgr.AddReadyzCheck("initial-sync", func(_ *http.Request) error {
+		return reconciler.CheckReady()
+	}); err != nil {
+		setupLog.Error(err, "unable to set up initial sync ready check")
 		os.Exit(1)
 	}
 
