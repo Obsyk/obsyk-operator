@@ -146,11 +146,13 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		agent.Status.ResourceCounts = counts
 	}
 
-	// Set healthy conditions
+	// Set healthy conditions and clear any degraded state
 	r.setCondition(agent, obsykv1.ConditionTypeAvailable, metav1.ConditionTrue,
 		"AgentRunning", "Agent is running and connected to platform")
 	r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionTrue,
 		"SyncActive", "Agent is actively syncing data")
+	r.setCondition(agent, obsykv1.ConditionTypeDegraded, metav1.ConditionFalse,
+		"AgentHealthy", "Agent is operating normally")
 
 	// Update observed generation
 	agent.Status.ObservedGeneration = agent.Generation
