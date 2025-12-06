@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -41,6 +42,14 @@ type TokenProvider interface {
 	GetAccessToken(ctx context.Context) (string, error)
 }
 
+// HealthStatus represents the current health state of the client.
+type HealthStatus struct {
+	Healthy           bool
+	LastHealthyTime   time.Time
+	ConsecutiveErrors int64
+	LastError         error
+}
+
 // Client handles HTTP communication with the Obsyk platform.
 // Client is safe for concurrent use by multiple goroutines.
 type Client struct {
@@ -48,8 +57,16 @@ type Client struct {
 	platformURL string
 	log         logr.Logger
 
-	mu            sync.RWMutex // Protects tokenProvider
+	mu            sync.RWMutex // Protects tokenProvider and lastError
 	tokenProvider TokenProvider
+
+	// Health tracking (atomic for lock-free reads)
+	healthy           int64 // 1 = healthy, 0 = unhealthy
+	lastHealthyTime   int64 // Unix timestamp
+	consecutiveErrors int64
+
+	// Last error (protected by mu)
+	lastError error
 }
 
 // ClientConfig holds configuration for creating a new Client.
@@ -85,6 +102,55 @@ func (c *Client) UpdateTokenProvider(provider TokenProvider) {
 	c.tokenProvider = provider
 }
 
+// recordHealthy records a successful request.
+func (c *Client) recordHealthy() {
+	atomic.StoreInt64(&c.healthy, 1)
+	atomic.StoreInt64(&c.lastHealthyTime, time.Now().Unix())
+	atomic.StoreInt64(&c.consecutiveErrors, 0)
+
+	c.mu.Lock()
+	c.lastError = nil
+	c.mu.Unlock()
+}
+
+// recordUnhealthy records a failed request.
+func (c *Client) recordUnhealthy(err error) {
+	atomic.StoreInt64(&c.healthy, 0)
+	atomic.AddInt64(&c.consecutiveErrors, 1)
+
+	c.mu.Lock()
+	c.lastError = err
+	c.mu.Unlock()
+}
+
+// IsHealthy returns true if the client is currently healthy.
+// A client is considered healthy if the last request succeeded.
+// This method is safe for concurrent use.
+func (c *Client) IsHealthy() bool {
+	return atomic.LoadInt64(&c.healthy) == 1
+}
+
+// GetHealthStatus returns the current health status of the client.
+// This method is safe for concurrent use.
+func (c *Client) GetHealthStatus() HealthStatus {
+	c.mu.RLock()
+	lastErr := c.lastError
+	c.mu.RUnlock()
+
+	lastHealthyUnix := atomic.LoadInt64(&c.lastHealthyTime)
+	var lastHealthyTime time.Time
+	if lastHealthyUnix > 0 {
+		lastHealthyTime = time.Unix(lastHealthyUnix, 0)
+	}
+
+	return HealthStatus{
+		Healthy:           atomic.LoadInt64(&c.healthy) == 1,
+		LastHealthyTime:   lastHealthyTime,
+		ConsecutiveErrors: atomic.LoadInt64(&c.consecutiveErrors),
+		LastError:         lastErr,
+	}
+}
+
 // SendSnapshot sends a full cluster state snapshot to the platform.
 func (c *Client) SendSnapshot(ctx context.Context, payload *SnapshotPayload) error {
 	return c.sendWithRetry(ctx, endpointSnapshot, payload)
@@ -114,6 +180,7 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 
 			select {
 			case <-ctx.Done():
+				c.recordUnhealthy(ctx.Err())
 				return ctx.Err()
 			case <-time.After(backoff):
 			}
@@ -121,6 +188,7 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 
 		err := c.send(ctx, endpoint, payload)
 		if err == nil {
+			c.recordHealthy()
 			return nil
 		}
 
@@ -129,6 +197,7 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 		// Check if error is retryable (5xx server errors)
 		if !isRetryableError(err) {
 			c.log.Error(err, "non-retryable error", "endpoint", endpoint)
+			c.recordUnhealthy(err)
 			return err
 		}
 
@@ -138,7 +207,9 @@ func (c *Client) sendWithRetry(ctx context.Context, endpoint string, payload int
 			"error", err.Error())
 	}
 
-	return fmt.Errorf("max retries exceeded: %w", lastErr)
+	finalErr := fmt.Errorf("max retries exceeded: %w", lastErr)
+	c.recordUnhealthy(finalErr)
+	return finalErr
 }
 
 // send performs the actual HTTP request.

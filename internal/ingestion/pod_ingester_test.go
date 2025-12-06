@@ -4,6 +4,7 @@
 package ingestion
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestPodIngester_OnAdd(t *testing.T) {
 		},
 	}
 
-	_, err := clientset.CoreV1().Pods("default").Create(nil, pod, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Pods("default").Create(context.TODO(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create pod: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestPodIngester_OnUpdate(t *testing.T) {
 	updatedPod.ResourceVersion = "2"
 	updatedPod.Labels = map[string]string{"updated": "true"}
 
-	_, err := clientset.CoreV1().Pods("default").Update(nil, updatedPod, metav1.UpdateOptions{})
+	_, err := clientset.CoreV1().Pods("default").Update(context.TODO(), updatedPod, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("failed to update pod: %v", err)
 	}
@@ -166,7 +167,7 @@ func TestPodIngester_OnDelete(t *testing.T) {
 	}
 
 	// Delete the pod
-	err := clientset.CoreV1().Pods("default").Delete(nil, "test-pod", metav1.DeleteOptions{})
+	err := clientset.CoreV1().Pods("default").Delete(context.TODO(), "test-pod", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("failed to delete pod: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestPodIngester_ChannelFull(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_, _ = clientset.CoreV1().Pods("default").Create(nil, pod, metav1.CreateOptions{})
+		_, _ = clientset.CoreV1().Pods("default").Create(context.TODO(), pod, metav1.CreateOptions{})
 		close(done)
 	}()
 
