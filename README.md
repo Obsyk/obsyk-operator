@@ -215,6 +215,20 @@ The operator caches watched resources. For large clusters, consider:
 - Adjusting memory limits in Helm values
 - Contacting support for namespace filtering options
 
+## Supply Chain Security
+
+### Software Bill of Materials (SBOM)
+
+Each release includes SBOMs (Software Bill of Materials) in two formats:
+- **SPDX** (`sbom-spdx.json`) - Linux Foundation standard
+- **CycloneDX** (`sbom-cyclonedx.json`) - OWASP standard
+
+Download from the [Releases page](https://github.com/Obsyk/obsyk-operator/releases).
+
+### Vulnerability Scanning
+
+Container images are scanned with [Trivy](https://trivy.dev/) on each release. Critical and high severity vulnerabilities are reported to GitHub Security.
+
 ## Uninstall
 
 ```bash
