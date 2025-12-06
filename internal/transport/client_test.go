@@ -518,3 +518,196 @@ func TestClient_ConcurrentMixedOperations(t *testing.T) {
 		t.Errorf("expected %d heartbeats, got %d", numEach, heartbeatCount)
 	}
 }
+
+// TestClient_HealthTracking tests health tracking on successful requests.
+func TestClient_HealthTracking(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	// Initially, client should not be healthy (no requests yet)
+	if client.IsHealthy() {
+		t.Error("expected client to not be healthy initially")
+	}
+
+	// Send a successful request
+	payload := &HeartbeatPayload{
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
+	}
+	err := client.SendHeartbeat(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("SendHeartbeat failed: %v", err)
+	}
+
+	// Now client should be healthy
+	if !client.IsHealthy() {
+		t.Error("expected client to be healthy after successful request")
+	}
+
+	// Check health status
+	status := client.GetHealthStatus()
+	if !status.Healthy {
+		t.Error("expected health status to be healthy")
+	}
+	if status.ConsecutiveErrors != 0 {
+		t.Errorf("expected 0 consecutive errors, got %d", status.ConsecutiveErrors)
+	}
+	if status.LastHealthyTime.IsZero() {
+		t.Error("expected LastHealthyTime to be set")
+	}
+	if status.LastError != nil {
+		t.Errorf("expected no last error, got %v", status.LastError)
+	}
+}
+
+// TestClient_HealthTrackingOnFailure tests health tracking on failed requests.
+func TestClient_HealthTrackingOnFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("bad request"))
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	// Send a failing request
+	payload := &HeartbeatPayload{
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
+	}
+	err := client.SendHeartbeat(context.Background(), payload)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Client should be unhealthy
+	if client.IsHealthy() {
+		t.Error("expected client to be unhealthy after failed request")
+	}
+
+	// Check health status
+	status := client.GetHealthStatus()
+	if status.Healthy {
+		t.Error("expected health status to be unhealthy")
+	}
+	if status.ConsecutiveErrors != 1 {
+		t.Errorf("expected 1 consecutive error, got %d", status.ConsecutiveErrors)
+	}
+	if status.LastError == nil {
+		t.Error("expected last error to be set")
+	}
+}
+
+// TestClient_HealthRecovery tests health recovery after failure.
+func TestClient_HealthRecovery(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	payload := &HeartbeatPayload{
+		ClusterUID:   "test-uid",
+		AgentVersion: "0.1.0",
+	}
+
+	// First request fails
+	_ = client.SendHeartbeat(context.Background(), payload)
+	if client.IsHealthy() {
+		t.Error("expected client to be unhealthy after first request")
+	}
+
+	status := client.GetHealthStatus()
+	if status.ConsecutiveErrors != 1 {
+		t.Errorf("expected 1 consecutive error, got %d", status.ConsecutiveErrors)
+	}
+
+	// Second request succeeds
+	err := client.SendHeartbeat(context.Background(), payload)
+	if err != nil {
+		t.Fatalf("second request failed: %v", err)
+	}
+
+	// Client should recover
+	if !client.IsHealthy() {
+		t.Error("expected client to be healthy after recovery")
+	}
+
+	status = client.GetHealthStatus()
+	if status.ConsecutiveErrors != 0 {
+		t.Errorf("expected 0 consecutive errors after recovery, got %d", status.ConsecutiveErrors)
+	}
+	if status.LastError != nil {
+		t.Error("expected last error to be cleared after recovery")
+	}
+}
+
+// TestClient_ConcurrentHealthTracking tests thread-safety of health tracking.
+func TestClient_ConcurrentHealthTracking(t *testing.T) {
+	var successCount, failCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Alternate between success and failure
+		if atomic.AddInt32(&successCount, 1)%2 == 0 {
+			atomic.AddInt32(&failCount, 1)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient(ClientConfig{
+		PlatformURL:   server.URL,
+		TokenProvider: &mockTokenProvider{token: "test-token"},
+		Logger:        logr.Discard(),
+	})
+
+	var wg sync.WaitGroup
+	numGoroutines := 50
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			payload := &HeartbeatPayload{
+				ClusterUID:   "test-uid",
+				AgentVersion: "0.1.0",
+			}
+			_ = client.SendHeartbeat(context.Background(), payload)
+
+			// Concurrently read health status
+			_ = client.IsHealthy()
+			_ = client.GetHealthStatus()
+		}()
+	}
+
+	wg.Wait()
+
+	// Just verify we can read health status after concurrent operations
+	status := client.GetHealthStatus()
+	t.Logf("Final health: healthy=%v, consecutiveErrors=%d", status.Healthy, status.ConsecutiveErrors)
+}
