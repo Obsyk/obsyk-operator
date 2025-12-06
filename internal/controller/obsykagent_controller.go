@@ -42,6 +42,10 @@ type ObsykAgentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
+	// APIReader is used for direct API calls without caching.
+	// Used for secrets to avoid cluster-wide cache watches.
+	APIReader client.Reader
+
 	// agentClients holds a client per ObsykAgent (keyed by namespace/name).
 	agentClients   map[string]*agentClient
 	agentClientsMu sync.RWMutex // Protects agentClients map
@@ -51,10 +55,12 @@ type ObsykAgentReconciler struct {
 }
 
 // NewObsykAgentReconciler creates a new reconciler.
-func NewObsykAgentReconciler(client client.Client, scheme *runtime.Scheme) *ObsykAgentReconciler {
+// apiReader should be mgr.GetAPIReader() for direct API calls without caching.
+func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *runtime.Scheme) *ObsykAgentReconciler {
 	return &ObsykAgentReconciler{
-		Client:       client,
+		Client:       c,
 		Scheme:       scheme,
+		APIReader:    apiReader,
 		agentClients: make(map[string]*agentClient),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -68,7 +74,8 @@ func NewObsykAgentReconciler(client client.Client, scheme *runtime.Scheme) *Obsy
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=list;watch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// Note: Secrets are accessed via APIReader with namespace-scoped RBAC (Role, not ClusterRole)
+// See charts/obsyk-operator/templates/role.yaml for the namespaced secret-reader Role
 
 // Reconcile handles ObsykAgent reconciliation.
 func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -231,7 +238,9 @@ func (r *ObsykAgentReconciler) getCredentials(ctx context.Context, agent *obsykv
 		Name:      agent.Spec.CredentialsSecretRef.Name,
 	}
 
-	if err := r.Get(ctx, secretRef, secret); err != nil {
+	// Use APIReader for direct API call without caching.
+	// This avoids controller-runtime setting up a cluster-wide watch on secrets.
+	if err := r.APIReader.Get(ctx, secretRef, secret); err != nil {
 		return nil, fmt.Errorf("getting secret %s: %w", secretRef, err)
 	}
 
