@@ -222,6 +222,29 @@ The operator caches watched resources. For large clusters, consider:
 
 ## Supply Chain Security
 
+Container images are signed and attested for supply chain security compliance.
+
+### Verify Image Signature
+
+All container images are signed using [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) with keyless signing:
+
+```bash
+# Install cosign: https://docs.sigstore.dev/cosign/installation/
+cosign verify ghcr.io/obsyk/obsyk-operator:v0.1.0 \
+  --certificate-identity-regexp="https://github.com/Obsyk/obsyk-operator" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
+
+### Verify SLSA Provenance
+
+Images include [SLSA](https://slsa.dev/) build provenance attestations:
+
+```bash
+# Using GitHub CLI
+gh attestation verify oci://ghcr.io/obsyk/obsyk-operator:v0.1.0 \
+  --owner Obsyk
+```
+
 ### Software Bill of Materials (SBOM)
 
 Each release includes SBOMs (Software Bill of Materials) in two formats:
@@ -233,6 +256,7 @@ Download from the [Releases page](https://github.com/Obsyk/obsyk-operator/releas
 ### Vulnerability Scanning
 
 Container images are scanned with [Trivy](https://trivy.dev/) on each release. Critical and high severity vulnerabilities are reported to GitHub Security.
+
 ### Rate limiting for large clusters
 
 For clusters with high pod churn, you may want to adjust the rate limit to balance between real-time updates and platform load:
