@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager .
 # Runtime stage
 # Pinned digest for supply chain security (update periodically)
 # To update: docker manifest inspect gcr.io/distroless/static:nonroot | jq '.manifests[] | select(.platform.architecture=="amd64")'
-FROM gcr.io/distroless/static:nonroot@sha256:cc50b1934f8352245c873c23b06fda77935f99e1f94166f366ee7397141d273c
+FROM gcr.io/distroless/static:nonroot@sha256:2b7c93f6d6648c11f0e80a48558c8f77885eb0445213b8e69a6a0d7c89fc6ae4
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
