@@ -63,6 +63,9 @@ jobs:
       - name: Get image digest
         id: digest
         run: |
+          # Earthly pushes to registry but doesn't leave image locally with RepoDigests
+          # Pull the image to get the digest
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }} | cut -d'@' -f2)
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
           echo "Image digest: ${DIGEST}"
