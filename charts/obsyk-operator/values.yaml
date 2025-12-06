@@ -34,6 +34,14 @@ agent:
   # How often to sync with the platform
   syncInterval: "5m"
 
+  # Rate limiting for event sending to the platform
+  # Prevents overwhelming the platform API during high event volume
+  rateLimit:
+    # Maximum events per second (1-1000, default: 10)
+    eventsPerSecond: 10
+    # Burst size for temporary spikes (1-1000, default: 20)
+    burstSize: 20
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
