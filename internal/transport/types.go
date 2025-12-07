@@ -194,22 +194,79 @@ type NamespaceInfo struct {
 
 // PodInfo contains relevant pod information.
 type PodInfo struct {
-	UID            string            `json:"uid"`
-	Name           string            `json:"name"`
-	Namespace      string            `json:"namespace"`
-	Labels         map[string]string `json:"labels,omitempty"`
-	Annotations    map[string]string `json:"annotations,omitempty"`
-	NodeName       string            `json:"node_name,omitempty"`
-	ServiceAccount string            `json:"service_account,omitempty"`
-	Containers     []ContainerInfo   `json:"containers,omitempty"`
-	Phase          string            `json:"phase,omitempty"`
-	K8sCreatedAt   *time.Time        `json:"k8s_created_at,omitempty"`
+	UID               string            `json:"uid"`
+	Name              string            `json:"name"`
+	Namespace         string            `json:"namespace"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	Annotations       map[string]string `json:"annotations,omitempty"`
+	NodeName          string            `json:"node_name,omitempty"`
+	ServiceAccount    string            `json:"service_account,omitempty"`
+	Phase             string            `json:"phase,omitempty"`
+	QoSClass          string            `json:"qos_class,omitempty"`
+	PriorityClassName string            `json:"priority_class_name,omitempty"`
+	HostIP            string            `json:"host_ip,omitempty"`
+	PodIP             string            `json:"pod_ip,omitempty"`
+	Conditions        []PodCondition    `json:"conditions,omitempty"`
+	Containers        []ContainerInfo   `json:"containers,omitempty"`
+	InitContainers    []ContainerInfo   `json:"init_containers,omitempty"`
+	Volumes           []VolumeInfo      `json:"volumes,omitempty"`
+	K8sCreatedAt      *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// PodCondition contains pod condition information.
+type PodCondition struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
 }
 
 // ContainerInfo contains relevant container information.
 type ContainerInfo struct {
-	Name  string `json:"name"`
-	Image string `json:"image"`
+	Name            string                    `json:"name"`
+	Image           string                    `json:"image"`
+	State           string                    `json:"state,omitempty"` // running, waiting, terminated
+	Ready           bool                      `json:"ready"`
+	RestartCount    int32                     `json:"restart_count"`
+	Resources       ResourceRequirements      `json:"resources,omitempty"`
+	Ports           []ContainerPort           `json:"ports,omitempty"`
+	VolumeMounts    []VolumeMount             `json:"volume_mounts,omitempty"`
+	EnvVarNames     []string                  `json:"env_var_names,omitempty"` // Names only, NOT values
+	SecurityContext *ContainerSecurityContext `json:"security_context,omitempty"`
+}
+
+// ResourceRequirements contains container resource requests and limits.
+type ResourceRequirements struct {
+	CPURequest    string `json:"cpu_request,omitempty"`    // e.g., "100m"
+	CPULimit      string `json:"cpu_limit,omitempty"`      // e.g., "500m"
+	MemoryRequest string `json:"memory_request,omitempty"` // e.g., "256Mi"
+	MemoryLimit   string `json:"memory_limit,omitempty"`   // e.g., "512Mi"
+}
+
+// ContainerPort contains container port information.
+type ContainerPort struct {
+	ContainerPort int32  `json:"container_port"`
+	Protocol      string `json:"protocol,omitempty"`
+	Name          string `json:"name,omitempty"`
+}
+
+// VolumeMount contains container volume mount information.
+type VolumeMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mount_path"`
+	ReadOnly  bool   `json:"read_only"`
+}
+
+// ContainerSecurityContext contains container security context information.
+type ContainerSecurityContext struct {
+	Privileged   *bool    `json:"privileged,omitempty"`
+	RunAsRoot    *bool    `json:"run_as_root,omitempty"` // true if runAsUser == 0
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// VolumeInfo contains pod volume information.
+type VolumeInfo struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`             // emptyDir, configMap, secret, pvc, hostPath, etc.
+	Source string `json:"source,omitempty"` // Reference name (PVC name, ConfigMap name, etc.)
 }
 
 // ServiceInfo contains relevant service information.
@@ -499,27 +556,210 @@ func NewNamespaceInfo(ns *corev1.Namespace) NamespaceInfo {
 
 // NewPodInfo creates PodInfo from a Kubernetes Pod.
 func NewPodInfo(pod *corev1.Pod) PodInfo {
+	// Build container status map for quick lookup
+	containerStatusMap := make(map[string]corev1.ContainerStatus)
+	for _, cs := range pod.Status.ContainerStatuses {
+		containerStatusMap[cs.Name] = cs
+	}
+
+	// Build init container status map
+	initContainerStatusMap := make(map[string]corev1.ContainerStatus)
+	for _, cs := range pod.Status.InitContainerStatuses {
+		initContainerStatusMap[cs.Name] = cs
+	}
+
+	// Process regular containers
 	containers := make([]ContainerInfo, 0, len(pod.Spec.Containers))
 	for _, c := range pod.Spec.Containers {
-		containers = append(containers, ContainerInfo{
-			Name:  c.Name,
-			Image: c.Image,
+		containers = append(containers, newContainerInfo(c, containerStatusMap[c.Name]))
+	}
+
+	// Process init containers
+	initContainers := make([]ContainerInfo, 0, len(pod.Spec.InitContainers))
+	for _, c := range pod.Spec.InitContainers {
+		initContainers = append(initContainers, newContainerInfo(c, initContainerStatusMap[c.Name]))
+	}
+
+	// Process volumes
+	volumes := make([]VolumeInfo, 0, len(pod.Spec.Volumes))
+	for _, v := range pod.Spec.Volumes {
+		volumes = append(volumes, newVolumeInfo(v))
+	}
+
+	// Process pod conditions
+	conditions := make([]PodCondition, 0, len(pod.Status.Conditions))
+	for _, c := range pod.Status.Conditions {
+		conditions = append(conditions, PodCondition{
+			Type:   string(c.Type),
+			Status: string(c.Status),
 		})
 	}
 
 	createdAt := pod.CreationTimestamp.Time
 	return PodInfo{
-		UID:            string(pod.UID),
-		Name:           pod.Name,
-		Namespace:      pod.Namespace,
-		Labels:         pod.Labels,
-		Annotations:    filterAnnotations(pod.Annotations),
-		NodeName:       pod.Spec.NodeName,
-		ServiceAccount: pod.Spec.ServiceAccountName,
-		Containers:     containers,
-		Phase:          string(pod.Status.Phase),
-		K8sCreatedAt:   &createdAt,
+		UID:               string(pod.UID),
+		Name:              pod.Name,
+		Namespace:         pod.Namespace,
+		Labels:            pod.Labels,
+		Annotations:       filterAnnotations(pod.Annotations),
+		NodeName:          pod.Spec.NodeName,
+		ServiceAccount:    pod.Spec.ServiceAccountName,
+		Phase:             string(pod.Status.Phase),
+		QoSClass:          string(pod.Status.QOSClass),
+		PriorityClassName: pod.Spec.PriorityClassName,
+		HostIP:            pod.Status.HostIP,
+		PodIP:             pod.Status.PodIP,
+		Conditions:        conditions,
+		Containers:        containers,
+		InitContainers:    initContainers,
+		Volumes:           volumes,
+		K8sCreatedAt:      &createdAt,
 	}
+}
+
+// newContainerInfo creates ContainerInfo from a container spec and status.
+func newContainerInfo(c corev1.Container, status corev1.ContainerStatus) ContainerInfo {
+	info := ContainerInfo{
+		Name:         c.Name,
+		Image:        c.Image,
+		Ready:        status.Ready,
+		RestartCount: status.RestartCount,
+	}
+
+	// Determine container state
+	if status.State.Running != nil {
+		info.State = "running"
+	} else if status.State.Waiting != nil {
+		info.State = "waiting"
+	} else if status.State.Terminated != nil {
+		info.State = "terminated"
+	}
+
+	// Extract resource requirements
+	if c.Resources.Requests != nil || c.Resources.Limits != nil {
+		info.Resources = ResourceRequirements{}
+		if c.Resources.Requests != nil {
+			if cpu, ok := c.Resources.Requests[corev1.ResourceCPU]; ok {
+				info.Resources.CPURequest = cpu.String()
+			}
+			if mem, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+				info.Resources.MemoryRequest = mem.String()
+			}
+		}
+		if c.Resources.Limits != nil {
+			if cpu, ok := c.Resources.Limits[corev1.ResourceCPU]; ok {
+				info.Resources.CPULimit = cpu.String()
+			}
+			if mem, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
+				info.Resources.MemoryLimit = mem.String()
+			}
+		}
+	}
+
+	// Extract ports
+	if len(c.Ports) > 0 {
+		info.Ports = make([]ContainerPort, 0, len(c.Ports))
+		for _, p := range c.Ports {
+			info.Ports = append(info.Ports, ContainerPort{
+				ContainerPort: p.ContainerPort,
+				Protocol:      string(p.Protocol),
+				Name:          p.Name,
+			})
+		}
+	}
+
+	// Extract volume mounts
+	if len(c.VolumeMounts) > 0 {
+		info.VolumeMounts = make([]VolumeMount, 0, len(c.VolumeMounts))
+		for _, vm := range c.VolumeMounts {
+			info.VolumeMounts = append(info.VolumeMounts, VolumeMount{
+				Name:      vm.Name,
+				MountPath: vm.MountPath,
+				ReadOnly:  vm.ReadOnly,
+			})
+		}
+	}
+
+	// Extract environment variable names (NOT values - security)
+	if len(c.Env) > 0 {
+		info.EnvVarNames = make([]string, 0, len(c.Env))
+		for _, env := range c.Env {
+			info.EnvVarNames = append(info.EnvVarNames, env.Name)
+		}
+	}
+
+	// Extract security context
+	if c.SecurityContext != nil {
+		info.SecurityContext = &ContainerSecurityContext{}
+
+		if c.SecurityContext.Privileged != nil {
+			info.SecurityContext.Privileged = c.SecurityContext.Privileged
+		}
+
+		// Check if running as root (runAsUser == 0)
+		if c.SecurityContext.RunAsUser != nil && *c.SecurityContext.RunAsUser == 0 {
+			runAsRoot := true
+			info.SecurityContext.RunAsRoot = &runAsRoot
+		} else if c.SecurityContext.RunAsNonRoot != nil && !*c.SecurityContext.RunAsNonRoot {
+			// If runAsNonRoot is explicitly false, it might run as root
+			runAsRoot := true
+			info.SecurityContext.RunAsRoot = &runAsRoot
+		}
+
+		// Extract capabilities
+		if c.SecurityContext.Capabilities != nil {
+			caps := make([]string, 0)
+			for _, cap := range c.SecurityContext.Capabilities.Add {
+				caps = append(caps, string(cap))
+			}
+			if len(caps) > 0 {
+				info.SecurityContext.Capabilities = caps
+			}
+		}
+	}
+
+	return info
+}
+
+// newVolumeInfo creates VolumeInfo from a pod volume.
+func newVolumeInfo(v corev1.Volume) VolumeInfo {
+	info := VolumeInfo{
+		Name: v.Name,
+	}
+
+	// Determine volume type and source
+	switch {
+	case v.EmptyDir != nil:
+		info.Type = "emptyDir"
+	case v.ConfigMap != nil:
+		info.Type = "configMap"
+		info.Source = v.ConfigMap.Name
+	case v.Secret != nil:
+		info.Type = "secret"
+		info.Source = v.Secret.SecretName
+	case v.PersistentVolumeClaim != nil:
+		info.Type = "pvc"
+		info.Source = v.PersistentVolumeClaim.ClaimName
+	case v.HostPath != nil:
+		info.Type = "hostPath"
+		info.Source = v.HostPath.Path
+	case v.Projected != nil:
+		info.Type = "projected"
+	case v.DownwardAPI != nil:
+		info.Type = "downwardAPI"
+	case v.CSI != nil:
+		info.Type = "csi"
+		info.Source = v.CSI.Driver
+	case v.NFS != nil:
+		info.Type = "nfs"
+		info.Source = v.NFS.Server + ":" + v.NFS.Path
+	case v.Ephemeral != nil:
+		info.Type = "ephemeral"
+	default:
+		info.Type = "unknown"
+	}
+
+	return info
 }
 
 // NewNodeInfo creates NodeInfo from a Kubernetes Node.
