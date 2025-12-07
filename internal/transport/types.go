@@ -24,11 +24,12 @@ const (
 type ResourceType string
 
 const (
-	ResourceTypePod        ResourceType = "Pod"
-	ResourceTypeService    ResourceType = "Service"
-	ResourceTypeNamespace  ResourceType = "Namespace"
-	ResourceTypeNode       ResourceType = "Node"
-	ResourceTypeDeployment ResourceType = "Deployment"
+	ResourceTypePod         ResourceType = "Pod"
+	ResourceTypeService     ResourceType = "Service"
+	ResourceTypeNamespace   ResourceType = "Namespace"
+	ResourceTypeNode        ResourceType = "Node"
+	ResourceTypeDeployment  ResourceType = "Deployment"
+	ResourceTypeStatefulSet ResourceType = "StatefulSet"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -65,6 +66,9 @@ type SnapshotPayload struct {
 
 	// Deployments in the cluster.
 	Deployments []DeploymentInfo `json:"deployments"`
+
+	// StatefulSets in the cluster.
+	StatefulSets []StatefulSetInfo `json:"statefulsets"`
 }
 
 // EventPayload represents a single resource change event.
@@ -102,11 +106,12 @@ type HeartbeatPayload struct {
 
 // ResourceCounts holds counts of watched resources.
 type ResourceCounts struct {
-	Namespaces  int32 `json:"namespaces"`
-	Pods        int32 `json:"pods"`
-	Services    int32 `json:"services"`
-	Nodes       int32 `json:"nodes"`
-	Deployments int32 `json:"deployments"`
+	Namespaces   int32 `json:"namespaces"`
+	Pods         int32 `json:"pods"`
+	Services     int32 `json:"services"`
+	Nodes        int32 `json:"nodes"`
+	Deployments  int32 `json:"deployments"`
+	StatefulSets int32 `json:"statefulsets"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -194,6 +199,23 @@ type DeploymentInfo struct {
 	Selector          map[string]string `json:"selector,omitempty"`
 	Image             string            `json:"image,omitempty"`
 	K8sCreatedAt      *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// StatefulSetInfo contains relevant statefulset information.
+type StatefulSetInfo struct {
+	UID             string            `json:"uid"`
+	Name            string            `json:"name"`
+	Namespace       string            `json:"namespace"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty"`
+	Replicas        int32             `json:"replicas"`
+	ReadyReplicas   int32             `json:"ready_replicas"`
+	CurrentReplicas int32             `json:"current_replicas"`
+	UpdateStrategy  string            `json:"update_strategy,omitempty"`
+	ServiceName     string            `json:"service_name,omitempty"`
+	Selector        map[string]string `json:"selector,omitempty"`
+	Image           string            `json:"image,omitempty"`
+	K8sCreatedAt    *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -318,6 +340,48 @@ func NewDeploymentInfo(deploy *appsv1.Deployment) DeploymentInfo {
 		Selector:          selector,
 		Image:             image,
 		K8sCreatedAt:      &createdAt,
+	}
+}
+
+// NewStatefulSetInfo creates StatefulSetInfo from a Kubernetes StatefulSet.
+func NewStatefulSetInfo(sts *appsv1.StatefulSet) StatefulSetInfo {
+	createdAt := sts.CreationTimestamp.Time
+
+	// Extract primary container image
+	var image string
+	if len(sts.Spec.Template.Spec.Containers) > 0 {
+		image = sts.Spec.Template.Spec.Containers[0].Image
+	}
+
+	// Get replicas - defaults to 1 if not specified
+	replicas := int32(1)
+	if sts.Spec.Replicas != nil {
+		replicas = *sts.Spec.Replicas
+	}
+
+	// Get update strategy type
+	updateStrategy := string(sts.Spec.UpdateStrategy.Type)
+
+	// Convert selector to map
+	var selector map[string]string
+	if sts.Spec.Selector != nil {
+		selector = sts.Spec.Selector.MatchLabels
+	}
+
+	return StatefulSetInfo{
+		UID:             string(sts.UID),
+		Name:            sts.Name,
+		Namespace:       sts.Namespace,
+		Labels:          sts.Labels,
+		Annotations:     filterAnnotations(sts.Annotations),
+		Replicas:        replicas,
+		ReadyReplicas:   sts.Status.ReadyReplicas,
+		CurrentReplicas: sts.Status.CurrentReplicas,
+		UpdateStrategy:  updateStrategy,
+		ServiceName:     sts.Spec.ServiceName,
+		Selector:        selector,
+		Image:           image,
+		K8sCreatedAt:    &createdAt,
 	}
 }
 
