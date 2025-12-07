@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -23,6 +24,7 @@ import (
 
 	obsykv1 "github.com/obsyk/obsyk-operator/api/v1"
 	"github.com/obsyk/obsyk-operator/internal/auth"
+	"github.com/obsyk/obsyk-operator/internal/ingestion"
 	"github.com/obsyk/obsyk-operator/internal/transport"
 )
 
@@ -31,10 +33,11 @@ const (
 	kubeSystemNamespace = "kube-system"
 )
 
-// agentClient holds a transport client and its token manager
+// agentClient holds a transport client, token manager, and ingestion manager
 type agentClient struct {
-	transport    *transport.Client
-	tokenManager *auth.TokenManager
+	transport        *transport.Client
+	tokenManager     *auth.TokenManager
+	ingestionManager *ingestion.Manager
 }
 
 // ObsykAgentReconciler reconciles an ObsykAgent object.
@@ -46,6 +49,9 @@ type ObsykAgentReconciler struct {
 	// Used for secrets to avoid cluster-wide cache watches.
 	APIReader client.Reader
 
+	// Clientset is used for SharedInformerFactory in ingestion.
+	Clientset kubernetes.Interface
+
 	// agentClients holds a client per ObsykAgent (keyed by namespace/name).
 	agentClients   map[string]*agentClient
 	agentClientsMu sync.RWMutex // Protects agentClients map
@@ -56,11 +62,13 @@ type ObsykAgentReconciler struct {
 
 // NewObsykAgentReconciler creates a new reconciler.
 // apiReader should be mgr.GetAPIReader() for direct API calls without caching.
-func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *runtime.Scheme) *ObsykAgentReconciler {
+// clientset is the kubernetes.Interface used for SharedInformerFactory.
+func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *runtime.Scheme, clientset kubernetes.Interface) *ObsykAgentReconciler {
 	return &ObsykAgentReconciler{
 		Client:       c,
 		Scheme:       scheme,
 		APIReader:    apiReader,
+		Clientset:    clientset,
 		agentClients: make(map[string]*agentClient),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -71,10 +79,32 @@ func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *r
 // +kubebuilder:rbac:groups=obsyk.io,resources=obsykagents,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=obsyk.io,resources=obsykagents/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=obsyk.io,resources=obsykagents/finalizers,verbs=update
+// Core resources
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=list;watch
 // +kubebuilder:rbac:groups="",resources=pods,verbs=list;watch
 // +kubebuilder:rbac:groups="",resources=services,verbs=list;watch
-// Note: Secrets are accessed via APIReader with namespace-scoped RBAC (Role, not ClusterRole)
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=list;watch
+// Apps resources
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=list;watch
+// +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=list;watch
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=list;watch
+// Batch resources
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=list;watch
+// +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=list;watch
+// Networking resources
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=list;watch
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=list;watch
+// RBAC resources
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=list;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterroles,verbs=list;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=list;watch
+// +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=clusterrolebindings,verbs=list;watch
+// Note: Operator-specific secrets are accessed via APIReader with namespace-scoped RBAC (Role, not ClusterRole)
 // See charts/obsyk-operator/templates/role.yaml for the namespaced secret-reader Role
 
 // Reconcile handles ObsykAgent reconciliation.
@@ -85,9 +115,14 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	agent := &obsykv1.ObsykAgent{}
 	if err := r.Get(ctx, req.NamespacedName, agent); err != nil {
 		if errors.IsNotFound(err) {
-			// Object deleted, clean up client
+			// Object deleted, clean up client and stop ingestion
 			r.agentClientsMu.Lock()
-			delete(r.agentClients, req.String())
+			if ac, ok := r.agentClients[req.String()]; ok {
+				if ac.ingestionManager != nil {
+					ac.ingestionManager.Stop()
+				}
+				delete(r.agentClients, req.String())
+			}
 			r.agentClientsMu.Unlock()
 			return ctrl.Result{}, nil
 		}
@@ -115,17 +150,31 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		agent.Status.ClusterUID = clusterUID
 	}
 
-	// Check if we need to send initial snapshot
+	// Check if we need to start ingestion manager and send initial snapshot
 	if agent.Status.LastSnapshotTime == nil {
-		if err := r.sendSnapshot(ctx, agent, ac.transport); err != nil {
-			logger.Error(err, "failed to send snapshot")
-			r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
-				"SnapshotFailed", err.Error())
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
+		// Start ingestion manager if not already running
+		if ac.ingestionManager == nil {
+			logger.Info("starting ingestion manager for agent")
+			ac.ingestionManager = r.startIngestionManager(ctx, agent, ac.transport)
 		}
-		now := metav1.Now()
-		agent.Status.LastSnapshotTime = &now
-		agent.Status.LastSyncTime = &now
+
+		// Wait for ingestion manager to be ready before sending snapshot
+		if ac.ingestionManager != nil && ac.ingestionManager.IsStarted() {
+			// Use ingestion manager for complete snapshot with all 20 resource types
+			if err := r.sendSnapshotFromManager(ctx, agent, ac); err != nil {
+				logger.Error(err, "failed to send snapshot")
+				r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
+					"SnapshotFailed", err.Error())
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
+			}
+			now := metav1.Now()
+			agent.Status.LastSnapshotTime = &now
+			agent.Status.LastSyncTime = &now
+		} else {
+			// Ingestion manager not ready yet, requeue quickly
+			logger.Info("waiting for ingestion manager to start")
+			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		}
 	} else {
 		// Send periodic heartbeat
 		if err := r.sendHeartbeat(ctx, agent, ac.transport); err != nil {
@@ -327,6 +376,85 @@ func (r *ObsykAgentReconciler) sendHeartbeat(ctx context.Context, agent *obsykv1
 		"clusterUID", agent.Status.ClusterUID)
 
 	return client.SendHeartbeat(ctx, payload)
+}
+
+// startIngestionManager creates and starts an ingestion manager for the agent.
+// It runs the manager in a background goroutine and returns immediately.
+// Returns nil if Clientset is not configured (e.g., in tests).
+func (r *ObsykAgentReconciler) startIngestionManager(ctx context.Context, agent *obsykv1.ObsykAgent, transportClient *transport.Client) *ingestion.Manager {
+	logger := log.FromContext(ctx)
+
+	// Clientset is required for SharedInformerFactory
+	if r.Clientset == nil {
+		logger.Info("clientset not configured, skipping ingestion manager")
+		return nil
+	}
+
+	// Build rate limit config from agent spec
+	var rateLimitCfg *ingestion.RateLimitConfig
+	if agent.Spec.RateLimit != nil {
+		rateLimitCfg = &ingestion.RateLimitConfig{
+			EventsPerSecond: float64(agent.Spec.RateLimit.EventsPerSecond),
+			BurstSize:       int(agent.Spec.RateLimit.BurstSize),
+		}
+	}
+
+	cfg := ingestion.ManagerConfig{
+		ClusterUID:  agent.Status.ClusterUID,
+		EventSender: transportClient,
+		RateLimit:   rateLimitCfg,
+	}
+
+	mgr := ingestion.NewManager(r.Clientset, cfg, logger)
+
+	// Start manager in background goroutine
+	go func() {
+		if err := mgr.Start(ctx); err != nil {
+			logger.Error(err, "ingestion manager stopped with error")
+		}
+	}()
+
+	return mgr
+}
+
+// sendSnapshotFromManager sends a complete snapshot using the ingestion manager's cached state.
+// This includes all 20 resource types instead of just 3.
+func (r *ObsykAgentReconciler) sendSnapshotFromManager(ctx context.Context, agent *obsykv1.ObsykAgent, ac *agentClient) error {
+	logger := log.FromContext(ctx)
+	logger.Info("sending complete snapshot from ingestion manager")
+
+	payload, err := ac.ingestionManager.GetCurrentState()
+	if err != nil {
+		return fmt.Errorf("getting current state from ingestion manager: %w", err)
+	}
+
+	// Set additional fields not available from manager
+	payload.ClusterName = agent.Spec.ClusterName
+	payload.AgentVersion = "0.1.0" // TODO: get from build info
+
+	logger.Info("complete snapshot prepared",
+		"namespaces", len(payload.Namespaces),
+		"pods", len(payload.Pods),
+		"services", len(payload.Services),
+		"nodes", len(payload.Nodes),
+		"deployments", len(payload.Deployments),
+		"statefulsets", len(payload.StatefulSets),
+		"daemonsets", len(payload.DaemonSets),
+		"jobs", len(payload.Jobs),
+		"cronjobs", len(payload.CronJobs),
+		"ingresses", len(payload.Ingresses),
+		"networkpolicies", len(payload.NetworkPolicies),
+		"configmaps", len(payload.ConfigMaps),
+		"secrets", len(payload.Secrets),
+		"pvcs", len(payload.PVCs),
+		"serviceaccounts", len(payload.ServiceAccounts),
+		"roles", len(payload.Roles),
+		"clusterroles", len(payload.ClusterRoles),
+		"rolebindings", len(payload.RoleBindings),
+		"clusterrolebindings", len(payload.ClusterRoleBindings),
+		"events", len(payload.Events))
+
+	return ac.transport.SendSnapshot(ctx, payload)
 }
 
 // getResourceCounts returns counts of watched resources.
