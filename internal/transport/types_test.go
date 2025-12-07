@@ -1205,3 +1205,94 @@ func TestNewSecretInfo_SecurityNoDataLeakage(t *testing.T) {
 		t.Error("Expected 'private-key' key in DataKeys")
 	}
 }
+
+func TestNewPVCInfo(t *testing.T) {
+	storageClass := "fast-ssd"
+	volumeMode := corev1.PersistentVolumeFilesystem
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pvc",
+			Namespace: "default",
+			UID:       "pvc-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &storageClass,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce, corev1.ReadOnlyMany},
+			VolumeMode:       &volumeMode,
+			VolumeName:       "pv-123",
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("10Gi"),
+				},
+			},
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Phase: corev1.ClaimBound,
+		},
+	}
+
+	info := NewPVCInfo(pvc)
+
+	if info.UID != "pvc-uid-123" {
+		t.Errorf("UID = %s, want pvc-uid-123", info.UID)
+	}
+	if info.Name != "test-pvc" {
+		t.Errorf("Name = %s, want test-pvc", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.StorageClassName != "fast-ssd" {
+		t.Errorf("StorageClassName = %s, want fast-ssd", info.StorageClassName)
+	}
+	if len(info.AccessModes) != 2 {
+		t.Errorf("AccessModes count = %d, want 2", len(info.AccessModes))
+	}
+	if info.StorageRequest != "10Gi" {
+		t.Errorf("StorageRequest = %s, want 10Gi", info.StorageRequest)
+	}
+	if info.VolumeName != "pv-123" {
+		t.Errorf("VolumeName = %s, want pv-123", info.VolumeName)
+	}
+	if info.Phase != "Bound" {
+		t.Errorf("Phase = %s, want Bound", info.Phase)
+	}
+	if info.VolumeMode != "Filesystem" {
+		t.Errorf("VolumeMode = %s, want Filesystem", info.VolumeMode)
+	}
+}
+
+func TestNewPVCInfo_Defaults(t *testing.T) {
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minimal-pvc",
+			Namespace: "default",
+			UID:       "pvc-uid-456",
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Phase: corev1.ClaimPending,
+		},
+	}
+
+	info := NewPVCInfo(pvc)
+
+	if info.StorageClassName != "" {
+		t.Errorf("StorageClassName = %s, want empty", info.StorageClassName)
+	}
+	if len(info.AccessModes) != 0 {
+		t.Errorf("AccessModes count = %d, want 0", len(info.AccessModes))
+	}
+	if info.StorageRequest != "" {
+		t.Errorf("StorageRequest = %s, want empty", info.StorageRequest)
+	}
+	if info.VolumeName != "" {
+		t.Errorf("VolumeName = %s, want empty", info.VolumeName)
+	}
+	if info.Phase != "Pending" {
+		t.Errorf("Phase = %s, want Pending", info.Phase)
+	}
+	if info.VolumeMode != "" {
+		t.Errorf("VolumeMode = %s, want empty", info.VolumeMode)
+	}
+}
