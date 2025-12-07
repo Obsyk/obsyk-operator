@@ -68,6 +68,13 @@ rules:
     verbs:
       - list
       - watch
+  - apiGroups:
+      - apps
+    resources:
+      - statefulsets
+    verbs:
+      - list
+      - watch
   # Note: Secret access is granted via Role (namespace-scoped) for least privilege
   # See role.yaml for secret access in the operator namespace only
   # Leader election
