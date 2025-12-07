@@ -98,6 +98,374 @@ func TestNewPodInfo(t *testing.T) {
 	}
 }
 
+func TestNewPodInfo_Enhanced(t *testing.T) {
+	privileged := true
+	runAsUser := int64(0)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "enhanced-pod",
+			Namespace: "production",
+			UID:       "pod-uid-enhanced",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: corev1.PodSpec{
+			NodeName:           "node-1",
+			ServiceAccountName: "app-sa",
+			PriorityClassName:  "high-priority",
+			InitContainers: []corev1.Container{
+				{
+					Name:  "init",
+					Image: "busybox:latest",
+				},
+			},
+			Containers: []corev1.Container{
+				{
+					Name:  "main",
+					Image: "nginx:latest",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+							corev1.ResourceMemory: resource.MustParse("256Mi"),
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    resource.MustParse("500m"),
+							corev1.ResourceMemory: resource.MustParse("512Mi"),
+						},
+					},
+					Ports: []corev1.ContainerPort{
+						{ContainerPort: 80, Protocol: corev1.ProtocolTCP, Name: "http"},
+						{ContainerPort: 443, Protocol: corev1.ProtocolTCP, Name: "https"},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{Name: "config", MountPath: "/etc/config", ReadOnly: true},
+						{Name: "data", MountPath: "/data", ReadOnly: false},
+					},
+					Env: []corev1.EnvVar{
+						{Name: "DATABASE_URL", Value: "sensitive-value"},
+						{Name: "API_KEY", Value: "secret-key"},
+					},
+					SecurityContext: &corev1.SecurityContext{
+						Privileged: &privileged,
+						RunAsUser:  &runAsUser,
+						Capabilities: &corev1.Capabilities{
+							Add: []corev1.Capability{"NET_ADMIN", "SYS_TIME"},
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{Name: "config", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-config"}}}},
+				{Name: "data", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "app-pvc"}}},
+				{Name: "secrets", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "app-secret"}}},
+				{Name: "empty", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase:    corev1.PodRunning,
+			QOSClass: corev1.PodQOSBurstable,
+			HostIP:   "192.168.1.10",
+			PodIP:    "10.0.0.5",
+			Conditions: []corev1.PodCondition{
+				{Type: corev1.PodReady, Status: corev1.ConditionTrue},
+				{Type: corev1.PodInitialized, Status: corev1.ConditionTrue},
+			},
+			ContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:         "main",
+					Ready:        true,
+					RestartCount: 2,
+					State:        corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+				},
+			},
+			InitContainerStatuses: []corev1.ContainerStatus{
+				{
+					Name:         "init",
+					Ready:        true,
+					RestartCount: 0,
+					State:        corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}},
+				},
+			},
+		},
+	}
+
+	info := NewPodInfo(pod)
+
+	// Test pod-level fields
+	if info.QoSClass != "Burstable" {
+		t.Errorf("QoSClass = %s, want Burstable", info.QoSClass)
+	}
+	if info.PriorityClassName != "high-priority" {
+		t.Errorf("PriorityClassName = %s, want high-priority", info.PriorityClassName)
+	}
+	if info.HostIP != "192.168.1.10" {
+		t.Errorf("HostIP = %s, want 192.168.1.10", info.HostIP)
+	}
+	if info.PodIP != "10.0.0.5" {
+		t.Errorf("PodIP = %s, want 10.0.0.5", info.PodIP)
+	}
+
+	// Test conditions
+	if len(info.Conditions) != 2 {
+		t.Errorf("Conditions count = %d, want 2", len(info.Conditions))
+	}
+
+	// Test init containers
+	if len(info.InitContainers) != 1 {
+		t.Fatalf("InitContainers count = %d, want 1", len(info.InitContainers))
+	}
+	if info.InitContainers[0].Name != "init" {
+		t.Errorf("InitContainer[0].Name = %s, want init", info.InitContainers[0].Name)
+	}
+	if info.InitContainers[0].State != "terminated" {
+		t.Errorf("InitContainer[0].State = %s, want terminated", info.InitContainers[0].State)
+	}
+
+	// Test main container
+	if len(info.Containers) != 1 {
+		t.Fatalf("Containers count = %d, want 1", len(info.Containers))
+	}
+	c := info.Containers[0]
+	if c.State != "running" {
+		t.Errorf("Container.State = %s, want running", c.State)
+	}
+	if !c.Ready {
+		t.Error("Container.Ready should be true")
+	}
+	if c.RestartCount != 2 {
+		t.Errorf("Container.RestartCount = %d, want 2", c.RestartCount)
+	}
+
+	// Test resources
+	if c.Resources.CPURequest != "100m" {
+		t.Errorf("Resources.CPURequest = %s, want 100m", c.Resources.CPURequest)
+	}
+	if c.Resources.MemoryRequest != "256Mi" {
+		t.Errorf("Resources.MemoryRequest = %s, want 256Mi", c.Resources.MemoryRequest)
+	}
+	if c.Resources.CPULimit != "500m" {
+		t.Errorf("Resources.CPULimit = %s, want 500m", c.Resources.CPULimit)
+	}
+	if c.Resources.MemoryLimit != "512Mi" {
+		t.Errorf("Resources.MemoryLimit = %s, want 512Mi", c.Resources.MemoryLimit)
+	}
+
+	// Test ports
+	if len(c.Ports) != 2 {
+		t.Fatalf("Ports count = %d, want 2", len(c.Ports))
+	}
+	if c.Ports[0].ContainerPort != 80 {
+		t.Errorf("Ports[0].ContainerPort = %d, want 80", c.Ports[0].ContainerPort)
+	}
+	if c.Ports[0].Name != "http" {
+		t.Errorf("Ports[0].Name = %s, want http", c.Ports[0].Name)
+	}
+
+	// Test volume mounts
+	if len(c.VolumeMounts) != 2 {
+		t.Fatalf("VolumeMounts count = %d, want 2", len(c.VolumeMounts))
+	}
+	if c.VolumeMounts[0].Name != "config" {
+		t.Errorf("VolumeMounts[0].Name = %s, want config", c.VolumeMounts[0].Name)
+	}
+	if !c.VolumeMounts[0].ReadOnly {
+		t.Error("VolumeMounts[0].ReadOnly should be true")
+	}
+
+	// Test env var names (security: verify NO values)
+	if len(c.EnvVarNames) != 2 {
+		t.Fatalf("EnvVarNames count = %d, want 2", len(c.EnvVarNames))
+	}
+	if c.EnvVarNames[0] != "DATABASE_URL" {
+		t.Errorf("EnvVarNames[0] = %s, want DATABASE_URL", c.EnvVarNames[0])
+	}
+	// SECURITY: Verify values are NOT present
+	for _, name := range c.EnvVarNames {
+		if name == "sensitive-value" || name == "secret-key" {
+			t.Fatalf("SECURITY VIOLATION: Env var value found in EnvVarNames")
+		}
+	}
+
+	// Test security context
+	if c.SecurityContext == nil {
+		t.Fatal("SecurityContext should not be nil")
+	}
+	if c.SecurityContext.Privileged == nil || !*c.SecurityContext.Privileged {
+		t.Error("SecurityContext.Privileged should be true")
+	}
+	if c.SecurityContext.RunAsRoot == nil || !*c.SecurityContext.RunAsRoot {
+		t.Error("SecurityContext.RunAsRoot should be true (runAsUser=0)")
+	}
+	if len(c.SecurityContext.Capabilities) != 2 {
+		t.Errorf("SecurityContext.Capabilities count = %d, want 2", len(c.SecurityContext.Capabilities))
+	}
+
+	// Test volumes
+	if len(info.Volumes) != 4 {
+		t.Fatalf("Volumes count = %d, want 4", len(info.Volumes))
+	}
+	volumeTypes := map[string]string{}
+	volumeSources := map[string]string{}
+	for _, v := range info.Volumes {
+		volumeTypes[v.Name] = v.Type
+		volumeSources[v.Name] = v.Source
+	}
+	if volumeTypes["config"] != "configMap" {
+		t.Errorf("Volume config type = %s, want configMap", volumeTypes["config"])
+	}
+	if volumeSources["config"] != "app-config" {
+		t.Errorf("Volume config source = %s, want app-config", volumeSources["config"])
+	}
+	if volumeTypes["data"] != "pvc" {
+		t.Errorf("Volume data type = %s, want pvc", volumeTypes["data"])
+	}
+	if volumeSources["data"] != "app-pvc" {
+		t.Errorf("Volume data source = %s, want app-pvc", volumeSources["data"])
+	}
+	if volumeTypes["secrets"] != "secret" {
+		t.Errorf("Volume secrets type = %s, want secret", volumeTypes["secrets"])
+	}
+	if volumeTypes["empty"] != "emptyDir" {
+		t.Errorf("Volume empty type = %s, want emptyDir", volumeTypes["empty"])
+	}
+}
+
+func TestNewPodInfo_ContainerStates(t *testing.T) {
+	tests := []struct {
+		name          string
+		state         corev1.ContainerState
+		expectedState string
+	}{
+		{
+			name:          "running",
+			state:         corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+			expectedState: "running",
+		},
+		{
+			name:          "waiting",
+			state:         corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{}},
+			expectedState: "waiting",
+		},
+		{
+			name:          "terminated",
+			state:         corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{}},
+			expectedState: "terminated",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "main", Image: "nginx"}},
+				},
+				Status: corev1.PodStatus{
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "main", State: tt.state},
+					},
+				},
+			}
+
+			info := NewPodInfo(pod)
+
+			if len(info.Containers) == 0 {
+				t.Fatal("Expected at least one container")
+			}
+			if info.Containers[0].State != tt.expectedState {
+				t.Errorf("State = %s, want %s", info.Containers[0].State, tt.expectedState)
+			}
+		})
+	}
+}
+
+func TestNewPodInfo_VolumeTypes(t *testing.T) {
+	tests := []struct {
+		name           string
+		volume         corev1.Volume
+		expectedType   string
+		expectedSource string
+	}{
+		{
+			name:           "emptyDir",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+			expectedType:   "emptyDir",
+			expectedSource: "",
+		},
+		{
+			name:           "configMap",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: "my-config"}}}},
+			expectedType:   "configMap",
+			expectedSource: "my-config",
+		},
+		{
+			name:           "secret",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "my-secret"}}},
+			expectedType:   "secret",
+			expectedSource: "my-secret",
+		},
+		{
+			name:           "pvc",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "my-pvc"}}},
+			expectedType:   "pvc",
+			expectedSource: "my-pvc",
+		},
+		{
+			name:           "hostPath",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
+			expectedType:   "hostPath",
+			expectedSource: "/var/log",
+		},
+		{
+			name:           "projected",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{Projected: &corev1.ProjectedVolumeSource{}}},
+			expectedType:   "projected",
+			expectedSource: "",
+		},
+		{
+			name:           "downwardAPI",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{DownwardAPI: &corev1.DownwardAPIVolumeSource{}}},
+			expectedType:   "downwardAPI",
+			expectedSource: "",
+		},
+		{
+			name:           "csi",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "csi.storage.k8s.io"}}},
+			expectedType:   "csi",
+			expectedSource: "csi.storage.k8s.io",
+		},
+		{
+			name:           "nfs",
+			volume:         corev1.Volume{Name: "test", VolumeSource: corev1.VolumeSource{NFS: &corev1.NFSVolumeSource{Server: "nfs.example.com", Path: "/exports"}}},
+			expectedType:   "nfs",
+			expectedSource: "nfs.example.com:/exports",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-pod", Namespace: "default"},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "main", Image: "nginx"}},
+					Volumes:    []corev1.Volume{tt.volume},
+				},
+			}
+
+			info := NewPodInfo(pod)
+
+			if len(info.Volumes) != 1 {
+				t.Fatalf("Expected 1 volume, got %d", len(info.Volumes))
+			}
+			if info.Volumes[0].Type != tt.expectedType {
+				t.Errorf("Type = %s, want %s", info.Volumes[0].Type, tt.expectedType)
+			}
+			if info.Volumes[0].Source != tt.expectedSource {
+				t.Errorf("Source = %s, want %s", info.Volumes[0].Source, tt.expectedSource)
+			}
+		})
+	}
+}
+
 func TestNewNodeInfo(t *testing.T) {
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
