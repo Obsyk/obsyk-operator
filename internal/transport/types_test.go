@@ -5,8 +5,10 @@ package transport
 
 import (
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -564,6 +566,164 @@ func TestNewDaemonSetInfo_NoContainers(t *testing.T) {
 
 	if info.Image != "" {
 		t.Errorf("Image = %s, want empty", info.Image)
+	}
+}
+
+func TestNewJobInfo(t *testing.T) {
+	completions := int32(3)
+	parallelism := int32(2)
+	startTime := metav1.NewTime(time.Now().Add(-1 * time.Hour))
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-job",
+			Namespace: "default",
+			UID:       "job-uid-123",
+			Labels:    map[string]string{"app": "test"},
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Kind: "CronJob",
+					Name: "parent-cronjob",
+				},
+			},
+		},
+		Spec: batchv1.JobSpec{
+			Completions: &completions,
+			Parallelism: &parallelism,
+		},
+		Status: batchv1.JobStatus{
+			Succeeded: 1,
+			Failed:    0,
+			Active:    2,
+			StartTime: &startTime,
+		},
+	}
+
+	info := NewJobInfo(job)
+
+	if info.UID != "job-uid-123" {
+		t.Errorf("UID = %s, want job-uid-123", info.UID)
+	}
+	if info.Name != "test-job" {
+		t.Errorf("Name = %s, want test-job", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Completions != 3 {
+		t.Errorf("Completions = %d, want 3", info.Completions)
+	}
+	if info.Parallelism != 2 {
+		t.Errorf("Parallelism = %d, want 2", info.Parallelism)
+	}
+	if info.Succeeded != 1 {
+		t.Errorf("Succeeded = %d, want 1", info.Succeeded)
+	}
+	if info.Active != 2 {
+		t.Errorf("Active = %d, want 2", info.Active)
+	}
+	if info.StartTime == nil {
+		t.Error("StartTime should not be nil")
+	}
+	if info.OwnerRef != "parent-cronjob" {
+		t.Errorf("OwnerRef = %s, want parent-cronjob", info.OwnerRef)
+	}
+}
+
+func TestNewJobInfo_Defaults(t *testing.T) {
+	job := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-job",
+			Namespace: "default",
+		},
+		Spec: batchv1.JobSpec{},
+	}
+
+	info := NewJobInfo(job)
+
+	if info.Completions != 1 {
+		t.Errorf("Completions = %d, want 1 (default)", info.Completions)
+	}
+	if info.Parallelism != 1 {
+		t.Errorf("Parallelism = %d, want 1 (default)", info.Parallelism)
+	}
+	if info.OwnerRef != "" {
+		t.Errorf("OwnerRef = %s, want empty", info.OwnerRef)
+	}
+}
+
+func TestNewCronJobInfo(t *testing.T) {
+	suspend := false
+	lastSchedule := metav1.NewTime(time.Now().Add(-30 * time.Minute))
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cronjob",
+			Namespace: "default",
+			UID:       "cj-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule:          "*/5 * * * *",
+			Suspend:           &suspend,
+			ConcurrencyPolicy: batchv1.ForbidConcurrent,
+		},
+		Status: batchv1.CronJobStatus{
+			LastScheduleTime: &lastSchedule,
+			Active: []corev1.ObjectReference{
+				{Name: "job-1"},
+				{Name: "job-2"},
+			},
+		},
+	}
+
+	info := NewCronJobInfo(cj)
+
+	if info.UID != "cj-uid-123" {
+		t.Errorf("UID = %s, want cj-uid-123", info.UID)
+	}
+	if info.Name != "test-cronjob" {
+		t.Errorf("Name = %s, want test-cronjob", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Schedule != "*/5 * * * *" {
+		t.Errorf("Schedule = %s, want */5 * * * *", info.Schedule)
+	}
+	if info.Suspend != false {
+		t.Errorf("Suspend = %v, want false", info.Suspend)
+	}
+	if info.ConcurrencyPolicy != "Forbid" {
+		t.Errorf("ConcurrencyPolicy = %s, want Forbid", info.ConcurrencyPolicy)
+	}
+	if info.LastScheduleTime == nil {
+		t.Error("LastScheduleTime should not be nil")
+	}
+	if info.ActiveJobs != 2 {
+		t.Errorf("ActiveJobs = %d, want 2", info.ActiveJobs)
+	}
+}
+
+func TestNewCronJobInfo_Defaults(t *testing.T) {
+	cj := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cronjob",
+			Namespace: "default",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 * * * *",
+		},
+	}
+
+	info := NewCronJobInfo(cj)
+
+	if info.Suspend != false {
+		t.Errorf("Suspend = %v, want false (default)", info.Suspend)
+	}
+	if info.ActiveJobs != 0 {
+		t.Errorf("ActiveJobs = %d, want 0", info.ActiveJobs)
+	}
+	if info.LastScheduleTime != nil {
+		t.Errorf("LastScheduleTime should be nil, got %v", info.LastScheduleTime)
 	}
 }
 
