@@ -52,10 +52,11 @@ type Manager struct {
 	limiter *rate.Limiter
 
 	// Individual ingesters
-	podIngester       *PodIngester
-	serviceIngester   *ServiceIngester
-	namespaceIngester *NamespaceIngester
-	nodeIngester      *NodeIngester
+	podIngester        *PodIngester
+	serviceIngester    *ServiceIngester
+	namespaceIngester  *NamespaceIngester
+	nodeIngester       *NodeIngester
+	deploymentIngester *DeploymentIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -122,12 +123,14 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.serviceIngester = NewServiceIngester(m.informerFactory, ingesterCfg, m.log)
 	m.namespaceIngester = NewNamespaceIngester(m.informerFactory, ingesterCfg, m.log)
 	m.nodeIngester = NewNodeIngester(m.informerFactory, ingesterCfg, m.log)
+	m.deploymentIngester = NewDeploymentIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
 	m.serviceIngester.RegisterHandlers()
 	m.namespaceIngester.RegisterHandlers()
 	m.nodeIngester.RegisterHandlers()
+	m.deploymentIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -345,13 +348,21 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 
+	// Get deployments
+	deployLister := m.informerFactory.Apps().V1().Deployments().Lister()
+	deployments, err := deployLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
-		ClusterUID: m.config.ClusterUID,
-		Namespaces: make([]transport.NamespaceInfo, 0, len(namespaces)),
-		Pods:       make([]transport.PodInfo, 0, len(pods)),
-		Services:   make([]transport.ServiceInfo, 0, len(services)),
-		Nodes:      make([]transport.NodeInfo, 0, len(nodes)),
+		ClusterUID:  m.config.ClusterUID,
+		Namespaces:  make([]transport.NamespaceInfo, 0, len(namespaces)),
+		Pods:        make([]transport.PodInfo, 0, len(pods)),
+		Services:    make([]transport.ServiceInfo, 0, len(services)),
+		Nodes:       make([]transport.NodeInfo, 0, len(nodes)),
+		Deployments: make([]transport.DeploymentInfo, 0, len(deployments)),
 	}
 
 	for _, ns := range namespaces {
@@ -368,6 +379,10 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, node := range nodes {
 		payload.Nodes = append(payload.Nodes, transport.NewNodeInfo(node))
+	}
+
+	for _, deploy := range deployments {
+		payload.Deployments = append(payload.Deployments, transport.NewDeploymentInfo(deploy))
 	}
 
 	return payload, nil
