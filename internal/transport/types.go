@@ -26,19 +26,20 @@ const (
 type ResourceType string
 
 const (
-	ResourceTypePod           ResourceType = "Pod"
-	ResourceTypeService       ResourceType = "Service"
-	ResourceTypeNamespace     ResourceType = "Namespace"
-	ResourceTypeNode          ResourceType = "Node"
-	ResourceTypeDeployment    ResourceType = "Deployment"
-	ResourceTypeStatefulSet   ResourceType = "StatefulSet"
-	ResourceTypeDaemonSet     ResourceType = "DaemonSet"
-	ResourceTypeJob           ResourceType = "Job"
-	ResourceTypeCronJob       ResourceType = "CronJob"
-	ResourceTypeIngress       ResourceType = "Ingress"
-	ResourceTypeNetworkPolicy ResourceType = "NetworkPolicy"
-	ResourceTypeConfigMap     ResourceType = "ConfigMap"
-	ResourceTypeSecret        ResourceType = "Secret"
+	ResourceTypePod                   ResourceType = "Pod"
+	ResourceTypeService               ResourceType = "Service"
+	ResourceTypeNamespace             ResourceType = "Namespace"
+	ResourceTypeNode                  ResourceType = "Node"
+	ResourceTypeDeployment            ResourceType = "Deployment"
+	ResourceTypeStatefulSet           ResourceType = "StatefulSet"
+	ResourceTypeDaemonSet             ResourceType = "DaemonSet"
+	ResourceTypeJob                   ResourceType = "Job"
+	ResourceTypeCronJob               ResourceType = "CronJob"
+	ResourceTypeIngress               ResourceType = "Ingress"
+	ResourceTypeNetworkPolicy         ResourceType = "NetworkPolicy"
+	ResourceTypeConfigMap             ResourceType = "ConfigMap"
+	ResourceTypeSecret                ResourceType = "Secret"
+	ResourceTypePersistentVolumeClaim ResourceType = "PersistentVolumeClaim"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -99,6 +100,9 @@ type SnapshotPayload struct {
 
 	// Secrets in the cluster (metadata only, NEVER data values).
 	Secrets []SecretInfo `json:"secrets"`
+
+	// PersistentVolumeClaims in the cluster.
+	PVCs []PVCInfo `json:"pvcs"`
 }
 
 // EventPayload represents a single resource change event.
@@ -149,6 +153,7 @@ type ResourceCounts struct {
 	NetworkPolicies int32 `json:"network_policies"`
 	ConfigMaps      int32 `json:"configmaps"`
 	Secrets         int32 `json:"secrets"`
+	PVCs            int32 `json:"pvcs"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -383,6 +388,22 @@ type SecretInfo struct {
 	DataKeys     []string          `json:"data_keys,omitempty"` // Keys only, NEVER values
 	Immutable    bool              `json:"immutable"`
 	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// PVCInfo contains relevant PersistentVolumeClaim information.
+type PVCInfo struct {
+	UID              string            `json:"uid"`
+	Name             string            `json:"name"`
+	Namespace        string            `json:"namespace"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	StorageClassName string            `json:"storage_class_name,omitempty"`
+	AccessModes      []string          `json:"access_modes,omitempty"`
+	StorageRequest   string            `json:"storage_request,omitempty"` // e.g., "10Gi"
+	VolumeName       string            `json:"volume_name,omitempty"`     // Bound PV name
+	Phase            string            `json:"phase,omitempty"`           // Pending, Bound, Lost
+	VolumeMode       string            `json:"volume_mode,omitempty"`     // Filesystem, Block
+	K8sCreatedAt     *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -881,6 +902,52 @@ func NewSecretInfo(secret *corev1.Secret) SecretInfo {
 		DataKeys:     dataKeys,
 		Immutable:    immutable,
 		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewPVCInfo creates PVCInfo from a Kubernetes PersistentVolumeClaim.
+func NewPVCInfo(pvc *corev1.PersistentVolumeClaim) PVCInfo {
+	createdAt := pvc.CreationTimestamp.Time
+
+	// Extract storage class name
+	var storageClassName string
+	if pvc.Spec.StorageClassName != nil {
+		storageClassName = *pvc.Spec.StorageClassName
+	}
+
+	// Extract access modes
+	accessModes := make([]string, 0, len(pvc.Spec.AccessModes))
+	for _, mode := range pvc.Spec.AccessModes {
+		accessModes = append(accessModes, string(mode))
+	}
+
+	// Extract storage request
+	var storageRequest string
+	if pvc.Spec.Resources.Requests != nil {
+		if storage, ok := pvc.Spec.Resources.Requests[corev1.ResourceStorage]; ok {
+			storageRequest = storage.String()
+		}
+	}
+
+	// Extract volume mode
+	var volumeMode string
+	if pvc.Spec.VolumeMode != nil {
+		volumeMode = string(*pvc.Spec.VolumeMode)
+	}
+
+	return PVCInfo{
+		UID:              string(pvc.UID),
+		Name:             pvc.Name,
+		Namespace:        pvc.Namespace,
+		Labels:           pvc.Labels,
+		Annotations:      filterAnnotations(pvc.Annotations),
+		StorageClassName: storageClassName,
+		AccessModes:      accessModes,
+		StorageRequest:   storageRequest,
+		VolumeName:       pvc.Spec.VolumeName,
+		Phase:            string(pvc.Status.Phase),
+		VolumeMode:       volumeMode,
+		K8sCreatedAt:     &createdAt,
 	}
 }
 

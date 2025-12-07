@@ -127,6 +127,13 @@ rules:
     verbs:
       - list
       - watch
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    verbs:
+      - list
+      - watch
   # Leader election
   - apiGroups:
       - coordination.k8s.io

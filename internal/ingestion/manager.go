@@ -65,6 +65,7 @@ type Manager struct {
 	networkpolicyIngester *NetworkPolicyIngester
 	configmapIngester     *ConfigMapIngester
 	secretIngester        *SecretIngester
+	pvcIngester           *PVCIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -140,6 +141,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.networkpolicyIngester = NewNetworkPolicyIngester(m.informerFactory, ingesterCfg, m.log)
 	m.configmapIngester = NewConfigMapIngester(m.informerFactory, ingesterCfg, m.log)
 	m.secretIngester = NewSecretIngester(m.informerFactory, ingesterCfg, m.log)
+	m.pvcIngester = NewPVCIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -155,6 +157,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.networkpolicyIngester.RegisterHandlers()
 	m.configmapIngester.RegisterHandlers()
 	m.secretIngester.RegisterHandlers()
+	m.pvcIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -435,6 +438,13 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing secrets: %w", err)
 	}
 
+	// Get PVCs
+	pvcLister := m.informerFactory.Core().V1().PersistentVolumeClaims().Lister()
+	pvcs, err := pvcLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing pvcs: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID:      m.config.ClusterUID,
@@ -451,6 +461,7 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		NetworkPolicies: make([]transport.NetworkPolicyInfo, 0, len(networkPolicies)),
 		ConfigMaps:      make([]transport.ConfigMapInfo, 0, len(configmaps)),
 		Secrets:         make([]transport.SecretInfo, 0, len(secrets)),
+		PVCs:            make([]transport.PVCInfo, 0, len(pvcs)),
 	}
 
 	for _, ns := range namespaces {
@@ -504,6 +515,10 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, secret := range secrets {
 		payload.Secrets = append(payload.Secrets, transport.NewSecretInfo(secret))
+	}
+
+	for _, pvc := range pvcs {
+		payload.PVCs = append(payload.PVCs, transport.NewPVCInfo(pvc))
 	}
 
 	return payload, nil
