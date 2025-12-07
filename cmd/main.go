@@ -10,6 +10,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -49,7 +50,9 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
@@ -63,12 +66,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Create kubernetes clientset for SharedInformerFactory
+	clientset, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "unable to create kubernetes clientset")
+		os.Exit(1)
+	}
+
 	// Register ObsykAgent controller
 	// Pass APIReader for direct API calls (secrets) without cluster-wide caching
+	// Pass clientset for SharedInformerFactory used by ingestion manager
 	reconciler := controller.NewObsykAgentReconciler(
 		mgr.GetClient(),
 		mgr.GetAPIReader(),
 		mgr.GetScheme(),
+		clientset,
 	)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ObsykAgent")
