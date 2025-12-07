@@ -37,7 +37,17 @@ jobs:
       - name: Set up Earthly
         uses: earthly/actions-setup@v1
         with:
-          version: v0.8.0
+          version: v0.8.16
+          use-cache: false
+
+      - name: Configure Earthly
+        run: |
+          mkdir -p ~/.earthly
+          cat > ~/.earthly/config.yml << 'EOF'
+          global:
+            disable_analytics: true
+            disable_log_sharing: true
+          EOF
 
       - name: Create Kind cluster
         uses: helm/kind-action@v1
