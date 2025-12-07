@@ -6,6 +6,7 @@ package transport
 import (
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -23,10 +24,11 @@ const (
 type ResourceType string
 
 const (
-	ResourceTypePod       ResourceType = "Pod"
-	ResourceTypeService   ResourceType = "Service"
-	ResourceTypeNamespace ResourceType = "Namespace"
-	ResourceTypeNode      ResourceType = "Node"
+	ResourceTypePod        ResourceType = "Pod"
+	ResourceTypeService    ResourceType = "Service"
+	ResourceTypeNamespace  ResourceType = "Namespace"
+	ResourceTypeNode       ResourceType = "Node"
+	ResourceTypeDeployment ResourceType = "Deployment"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -60,6 +62,9 @@ type SnapshotPayload struct {
 
 	// Nodes in the cluster.
 	Nodes []NodeInfo `json:"nodes"`
+
+	// Deployments in the cluster.
+	Deployments []DeploymentInfo `json:"deployments"`
 }
 
 // EventPayload represents a single resource change event.
@@ -97,10 +102,11 @@ type HeartbeatPayload struct {
 
 // ResourceCounts holds counts of watched resources.
 type ResourceCounts struct {
-	Namespaces int32 `json:"namespaces"`
-	Pods       int32 `json:"pods"`
-	Services   int32 `json:"services"`
-	Nodes      int32 `json:"nodes"`
+	Namespaces  int32 `json:"namespaces"`
+	Pods        int32 `json:"pods"`
+	Services    int32 `json:"services"`
+	Nodes       int32 `json:"nodes"`
+	Deployments int32 `json:"deployments"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -171,6 +177,23 @@ type NodeInfo struct {
 	MemoryCapacity   string            `json:"memory_capacity,omitempty"`
 	PodCapacity      string            `json:"pod_capacity,omitempty"`
 	K8sCreatedAt     *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// DeploymentInfo contains relevant deployment information.
+type DeploymentInfo struct {
+	UID               string            `json:"uid"`
+	Name              string            `json:"name"`
+	Namespace         string            `json:"namespace"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	Annotations       map[string]string `json:"annotations,omitempty"`
+	Replicas          int32             `json:"replicas"`
+	ReadyReplicas     int32             `json:"ready_replicas"`
+	AvailableReplicas int32             `json:"available_replicas"`
+	UpdatedReplicas   int32             `json:"updated_replicas"`
+	Strategy          string            `json:"strategy,omitempty"`
+	Selector          map[string]string `json:"selector,omitempty"`
+	Image             string            `json:"image,omitempty"`
+	K8sCreatedAt      *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -253,6 +276,48 @@ func NewNodeInfo(node *corev1.Node) NodeInfo {
 		MemoryCapacity:   node.Status.Capacity.Memory().String(),
 		PodCapacity:      node.Status.Capacity.Pods().String(),
 		K8sCreatedAt:     &createdAt,
+	}
+}
+
+// NewDeploymentInfo creates DeploymentInfo from a Kubernetes Deployment.
+func NewDeploymentInfo(deploy *appsv1.Deployment) DeploymentInfo {
+	createdAt := deploy.CreationTimestamp.Time
+
+	// Extract primary container image
+	var image string
+	if len(deploy.Spec.Template.Spec.Containers) > 0 {
+		image = deploy.Spec.Template.Spec.Containers[0].Image
+	}
+
+	// Get replicas - defaults to 1 if not specified
+	replicas := int32(1)
+	if deploy.Spec.Replicas != nil {
+		replicas = *deploy.Spec.Replicas
+	}
+
+	// Get strategy type
+	strategy := string(deploy.Spec.Strategy.Type)
+
+	// Convert selector to map
+	var selector map[string]string
+	if deploy.Spec.Selector != nil {
+		selector = deploy.Spec.Selector.MatchLabels
+	}
+
+	return DeploymentInfo{
+		UID:               string(deploy.UID),
+		Name:              deploy.Name,
+		Namespace:         deploy.Namespace,
+		Labels:            deploy.Labels,
+		Annotations:       filterAnnotations(deploy.Annotations),
+		Replicas:          replicas,
+		ReadyReplicas:     deploy.Status.ReadyReplicas,
+		AvailableReplicas: deploy.Status.AvailableReplicas,
+		UpdatedReplicas:   deploy.Status.UpdatedReplicas,
+		Strategy:          strategy,
+		Selector:          selector,
+		Image:             image,
+		K8sCreatedAt:      &createdAt,
 	}
 }
 
