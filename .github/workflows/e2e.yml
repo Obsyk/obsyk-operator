@@ -34,10 +34,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Earthly
-        uses: earthly/actions-setup@v1
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          version: v0.8.0
+          go-version: '1.25'
+          check-latest: true
 
       - name: Create Kind cluster
         uses: helm/kind-action@v1
@@ -45,7 +46,7 @@ jobs:
           cluster_name: obsyk-e2e
 
       - name: Build operator image
-        run: earthly +docker --VERSION=e2e-test
+        run: make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:e2e-test
 
       - name: Load image into Kind
         run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:e2e-test --name obsyk-e2e
@@ -135,7 +136,7 @@ jobs:
             exit 1
           fi
 
-          echo "✅ E2E test passed - operator synced successfully"
+          echo "E2E test passed - operator synced successfully"
 
       - name: Cleanup - Delete Kind cluster
         if: always()

@@ -12,9 +12,9 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 
 ## Tech Stack
 
-- **Language**: Go 1.24+
+- **Language**: Go 1.25+
 - **Framework**: Kubebuilder v4 (controller-runtime)
-- **Build**: Earthly (containerized builds)
+- **Build**: Make + Docker
 - **Installation**: Helm chart
 - **CI/CD**: GitHub Actions
 - **Container Registry**: GHCR (ghcr.io/obsyk/obsyk-operator)
@@ -78,8 +78,8 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
     e2e.yml                   # E2E tests on Kind cluster
 /docs/
   TEST_PLAN_GH11.md           # Event-driven streaming test plan
-/Earthfile                    # Earthly build definitions
-/Dockerfile                   # Runtime image (used by Earthly)
+/Makefile                     # Build automation
+/Dockerfile                   # Multi-stage Docker build
 ```
 
 ## Architecture
@@ -291,32 +291,37 @@ All major components are thread-safe:
 
 ```bash
 # Run all CI checks (lint, test, build)
-earthly +ci
+make ci
 
 # Run linters only
-earthly +lint
+make lint
 
 # Run tests only
-earthly +test
+make test
 
 # Build binary only
-earthly +build
+make build
 
 # Build Docker image
-earthly +docker
+make docker-build
 
 # Build and push Docker image
-earthly --push +docker --VERSION=v1.0.0
+make docker-build docker-push IMG=ghcr.io/obsyk/obsyk-operator:v1.0.0
 
 # Generate CRD manifests
-earthly +manifests
+make manifests
+
+# Generate DeepCopy methods
+make generate
+
+# Show all available targets
+make help
 ```
 
 ## Local Development
 
 ### Prerequisites
-- Go 1.24+
-- Earthly
+- Go 1.25+
 - Docker (OrbStack recommended for Mac)
 - kubectl configured to a test cluster
 - Kind or Minikube for local testing
@@ -328,10 +333,10 @@ earthly +manifests
 kind create cluster --name obsyk-dev
 
 # Build and run tests
-earthly +ci
+make ci
 
 # Run controller locally (outside cluster)
-go run ./cmd/main.go
+make run
 
 # In another terminal, create test resources
 kubectl apply -f config/samples/
@@ -482,7 +487,7 @@ GitHub Issues for bug/feature management.
 ## CI/CD Pipeline
 
 ### PR Checks (ci.yml)
-- Earthly `+ci` target runs: gofmt, go vet, golangci-lint, tests, build
+- `make ci` runs: gofmt, go vet, golangci-lint, tests, build
 - Helm chart linting and template validation
 
 ### E2E Tests (e2e.yml) - on push to main
@@ -514,8 +519,11 @@ cat private.pem | base64 | gh secret set E2E_PRIVATE_KEY
 ```
 
 ### Release (release.yml) - on tag push
-- Earthly builds and pushes Docker image to GHCR
+- Builds and pushes Docker image to GHCR
+- Container signing with Sigstore Cosign
+- SLSA provenance attestation
 - Security scan with Trivy
+- SBOM generation (SPDX and CycloneDX formats)
 - Package and publish Helm chart to GitHub Pages
 
 ## Git Workflow
