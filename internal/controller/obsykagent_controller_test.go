@@ -53,7 +53,7 @@ func TestNewObsykAgentReconciler(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	if reconciler == nil {
 		t.Fatal("expected non-nil reconciler")
@@ -111,7 +111,7 @@ func TestReconciler_ConcurrentAgentClientAccess(t *testing.T) {
 	}
 	fakeClient := clientBuilder.Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// Concurrently call getOrCreateAgentClient for different agents
 	var wg sync.WaitGroup
@@ -184,7 +184,7 @@ func TestReconciler_ConcurrentDeleteAndCreate(t *testing.T) {
 		WithObjects(secret, agent).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -239,7 +239,7 @@ func TestReconciler_ReconcileNotFound(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// Pre-populate with a client that should be deleted
 	reconciler.agentClientsMu.Lock()
@@ -279,7 +279,7 @@ func TestReconciler_CheckPlatformHealth(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// With no agents, should be healthy
 	err := reconciler.CheckPlatformHealth()
@@ -295,7 +295,7 @@ func TestReconciler_CheckReady(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// With no agents, should be ready
 	err := reconciler.CheckReady()
@@ -322,7 +322,7 @@ func TestReconciler_GetClusterUID(t *testing.T) {
 		WithObjects(kubeSystemNS).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	uid, err := reconciler.getClusterUID(context.Background())
 	if err != nil {
@@ -341,7 +341,7 @@ func TestReconciler_GetClusterUIDNotFound(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	_, err := reconciler.getClusterUID(context.Background())
 	if err == nil {
@@ -371,7 +371,7 @@ func TestReconciler_GetResourceCounts(t *testing.T) {
 		WithObjects(ns, pod, svc).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	counts, err := reconciler.getResourceCounts(context.Background())
 	if err != nil {
@@ -396,7 +396,7 @@ func TestReconciler_SetCondition(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	agent := &obsykv1.ObsykAgent{
 		ObjectMeta: metav1.ObjectMeta{
@@ -466,7 +466,7 @@ func TestReconciler_GetCredentials(t *testing.T) {
 		WithObjects(secret).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	creds, err := reconciler.getCredentials(context.Background(), agent)
 	if err != nil {
@@ -497,7 +497,7 @@ func TestReconciler_GetCredentialsNotFound(t *testing.T) {
 	}
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	_, err := reconciler.getCredentials(context.Background(), agent)
 	if err == nil {
@@ -529,7 +529,7 @@ func TestReconciler_FindAgentsForResource(t *testing.T) {
 		WithObjects(agent1, agent2).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// Create a test pod to trigger the lookup
 	pod := &corev1.Pod{
@@ -584,7 +584,7 @@ func TestReconciler_CheckPlatformHealthWithUnhealthyAgent(t *testing.T) {
 		WithObjects(secret, agent).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// Create an agent client (which will be unhealthy initially since it has never connected)
 	_, err := reconciler.getOrCreateAgentClient(context.Background(), agent)
@@ -637,7 +637,7 @@ func TestReconciler_CheckReadyWithNoSyncedAgent(t *testing.T) {
 		WithObjects(secret, agent).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	// Create an agent client (which will not have synced initially)
 	_, err := reconciler.getOrCreateAgentClient(context.Background(), agent)
@@ -699,7 +699,7 @@ func TestReconciler_ReconcileAgentExists(t *testing.T) {
 		WithStatusSubresource(agent).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	req := ctrl.Request{
 		NamespacedName: types.NamespacedName{
@@ -708,12 +708,11 @@ func TestReconciler_ReconcileAgentExists(t *testing.T) {
 		},
 	}
 
-	// This will fail at sendSnapshot because there's no real platform,
-	// but it exercises more code paths
+	// With nil clientset, the ingestion manager won't start, so we'll get a requeue
 	result, err := reconciler.Reconcile(context.Background(), req)
-	// We expect a requeue because sendSnapshot will fail
+	// We expect a requeue to wait for ingestion manager to start
 	if result.RequeueAfter == 0 && err == nil {
-		t.Error("expected requeue or error due to network failure")
+		t.Error("expected requeue while waiting for ingestion manager")
 	}
 }
 
@@ -743,7 +742,7 @@ func TestReconciler_ReconcileMissingSecret(t *testing.T) {
 		WithStatusSubresource(agent).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	req := ctrl.Request{
 		NamespacedName: types.NamespacedName{
@@ -794,7 +793,7 @@ func TestReconciler_GetCredentialsInvalidKey(t *testing.T) {
 		WithObjects(secret).
 		Build()
 
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	_, err := reconciler.getCredentials(context.Background(), agent)
 	if err == nil {
@@ -809,7 +808,7 @@ func TestReconciler_FindAgentsForResourceEmpty(t *testing.T) {
 	_ = obsykv1.AddToScheme(scheme)
 
 	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme)
+	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
