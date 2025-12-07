@@ -79,7 +79,7 @@ func (d *DaemonSetIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newDs.Namespace,
 		"uid", newDs.UID)
 
-	d.sendEvent(transport.EventTypeUpdated, newDs)
+	d.sendEvent(transport.EventTypeModified, newDs)
 }
 
 // onDelete handles DaemonSet deletion events.

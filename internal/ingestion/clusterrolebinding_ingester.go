@@ -77,7 +77,7 @@ func (c *ClusterRoleBindingIngester) onUpdate(oldObj, newObj interface{}) {
 		"name", newCRB.Name,
 		"uid", newCRB.UID)
 
-	c.sendEvent(transport.EventTypeUpdated, newCRB)
+	c.sendEvent(transport.EventTypeModified, newCRB)
 }
 
 // onDelete handles ClusterRoleBinding deletion events.

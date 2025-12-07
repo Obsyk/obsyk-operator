@@ -79,7 +79,7 @@ func (s *ServiceIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newSvc.Namespace,
 		"uid", newSvc.UID)
 
-	s.sendEvent(transport.EventTypeUpdated, newSvc)
+	s.sendEvent(transport.EventTypeModified, newSvc)
 }
 
 // onDelete handles Service deletion events.

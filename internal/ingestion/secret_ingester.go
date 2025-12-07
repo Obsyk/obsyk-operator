@@ -81,7 +81,7 @@ func (i *SecretIngester) onUpdate(oldObj, newObj interface{}) {
 
 	// SECURITY: Never log secret data - only log metadata
 	i.log.V(1).Info("Secret updated", "name", secret.Name, "namespace", secret.Namespace, "type", secret.Type)
-	i.sendEvent(transport.EventTypeUpdated, secret)
+	i.sendEvent(transport.EventTypeModified, secret)
 }
 
 // onDelete handles Secret delete events.
