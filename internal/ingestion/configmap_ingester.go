@@ -4,6 +4,8 @@
 package ingestion
 
 import (
+	"sync"
+
 	"github.com/go-logr/logr"
 	"github.com/obsyk/obsyk-operator/internal/transport"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,7 @@ type ConfigMapIngester struct {
 	config          IngesterConfig
 	log             logr.Logger
 	lastVersion     map[string]string // Track resourceVersion to skip duplicate updates
+	lastVersionMu   sync.RWMutex      // Protects lastVersion map from concurrent access
 }
 
 // NewConfigMapIngester creates a new ConfigMap ingester.
@@ -53,7 +56,9 @@ func (i *ConfigMapIngester) onAdd(obj interface{}) {
 
 	// Track version for deduplication
 	key := cm.Namespace + "/" + cm.Name
+	i.lastVersionMu.Lock()
 	i.lastVersion[key] = cm.ResourceVersion
+	i.lastVersionMu.Unlock()
 
 	i.sendEvent(transport.EventTypeAdded, cm)
 }
@@ -68,11 +73,14 @@ func (i *ConfigMapIngester) onUpdate(oldObj, newObj interface{}) {
 
 	// Skip if resourceVersion hasn't changed (duplicate event)
 	key := cm.Namespace + "/" + cm.Name
+	i.lastVersionMu.Lock()
 	if i.lastVersion[key] == cm.ResourceVersion {
+		i.lastVersionMu.Unlock()
 		i.log.V(2).Info("skipping duplicate ConfigMap update", "name", cm.Name, "namespace", cm.Namespace)
 		return
 	}
 	i.lastVersion[key] = cm.ResourceVersion
+	i.lastVersionMu.Unlock()
 
 	i.log.V(1).Info("ConfigMap updated", "name", cm.Name, "namespace", cm.Namespace)
 	i.sendEvent(transport.EventTypeModified, cm)
@@ -99,7 +107,9 @@ func (i *ConfigMapIngester) onDelete(obj interface{}) {
 
 	// Clean up version tracking
 	key := cm.Namespace + "/" + cm.Name
+	i.lastVersionMu.Lock()
 	delete(i.lastVersion, key)
+	i.lastVersionMu.Unlock()
 
 	i.sendDeleteEvent(cm)
 }
