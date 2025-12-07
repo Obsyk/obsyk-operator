@@ -63,6 +63,8 @@ type Manager struct {
 	cronjobIngester       *CronJobIngester
 	ingressIngester       *IngressIngester
 	networkpolicyIngester *NetworkPolicyIngester
+	configmapIngester     *ConfigMapIngester
+	secretIngester        *SecretIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -136,6 +138,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.cronjobIngester = NewCronJobIngester(m.informerFactory, ingesterCfg, m.log)
 	m.ingressIngester = NewIngressIngester(m.informerFactory, ingesterCfg, m.log)
 	m.networkpolicyIngester = NewNetworkPolicyIngester(m.informerFactory, ingesterCfg, m.log)
+	m.configmapIngester = NewConfigMapIngester(m.informerFactory, ingesterCfg, m.log)
+	m.secretIngester = NewSecretIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -149,6 +153,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.cronjobIngester.RegisterHandlers()
 	m.ingressIngester.RegisterHandlers()
 	m.networkpolicyIngester.RegisterHandlers()
+	m.configmapIngester.RegisterHandlers()
+	m.secretIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -415,6 +421,20 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing network policies: %w", err)
 	}
 
+	// Get configmaps (metadata only, no data values)
+	cmLister := m.informerFactory.Core().V1().ConfigMaps().Lister()
+	configmaps, err := cmLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing configmaps: %w", err)
+	}
+
+	// Get secrets (metadata only, NEVER data values - security critical)
+	secretLister := m.informerFactory.Core().V1().Secrets().Lister()
+	secrets, err := secretLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing secrets: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID:      m.config.ClusterUID,
@@ -429,6 +449,8 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		CronJobs:        make([]transport.CronJobInfo, 0, len(cronjobs)),
 		Ingresses:       make([]transport.IngressInfo, 0, len(ingresses)),
 		NetworkPolicies: make([]transport.NetworkPolicyInfo, 0, len(networkPolicies)),
+		ConfigMaps:      make([]transport.ConfigMapInfo, 0, len(configmaps)),
+		Secrets:         make([]transport.SecretInfo, 0, len(secrets)),
 	}
 
 	for _, ns := range namespaces {
@@ -473,6 +495,15 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, np := range networkPolicies {
 		payload.NetworkPolicies = append(payload.NetworkPolicies, transport.NewNetworkPolicyInfo(np))
+	}
+
+	// SECURITY: ConfigMaps and Secrets only get metadata and keys, never values
+	for _, cm := range configmaps {
+		payload.ConfigMaps = append(payload.ConfigMaps, transport.NewConfigMapInfo(cm))
+	}
+
+	for _, secret := range secrets {
+		payload.Secrets = append(payload.Secrets, transport.NewSecretInfo(secret))
 	}
 
 	return payload, nil
