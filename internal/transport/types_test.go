@@ -6,6 +6,7 @@ package transport
 import (
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -306,6 +307,175 @@ func TestNewServiceInfo(t *testing.T) {
 	}
 	if info.Ports[0].Port != 80 {
 		t.Errorf("Ports[0].Port = %d, want 80", info.Ports[0].Port)
+	}
+}
+
+func TestNewDeploymentInfo(t *testing.T) {
+	replicas := int32(5)
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+			UID:       "deploy-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas:     3,
+			AvailableReplicas: 3,
+			UpdatedReplicas:   5,
+		},
+	}
+
+	info := NewDeploymentInfo(deploy)
+
+	if info.UID != "deploy-uid-123" {
+		t.Errorf("UID = %s, want deploy-uid-123", info.UID)
+	}
+	if info.Name != "test-deployment" {
+		t.Errorf("Name = %s, want test-deployment", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Replicas != 5 {
+		t.Errorf("Replicas = %d, want 5", info.Replicas)
+	}
+	if info.ReadyReplicas != 3 {
+		t.Errorf("ReadyReplicas = %d, want 3", info.ReadyReplicas)
+	}
+	if info.Strategy != "RollingUpdate" {
+		t.Errorf("Strategy = %s, want RollingUpdate", info.Strategy)
+	}
+	if info.Image != "nginx:latest" {
+		t.Errorf("Image = %s, want nginx:latest", info.Image)
+	}
+}
+
+func TestNewDeploymentInfo_NilReplicas(t *testing.T) {
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "nginx:latest"},
+					},
+				},
+			},
+		},
+	}
+
+	info := NewDeploymentInfo(deploy)
+
+	if info.Replicas != 1 {
+		t.Errorf("Replicas = %d, want 1 (default)", info.Replicas)
+	}
+}
+
+func TestNewStatefulSetInfo(t *testing.T) {
+	replicas := int32(3)
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+			UID:       "sts-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    &replicas,
+			ServiceName: "test-headless",
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "postgres:14"},
+					},
+				},
+			},
+		},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas:   2,
+			CurrentReplicas: 3,
+		},
+	}
+
+	info := NewStatefulSetInfo(sts)
+
+	if info.UID != "sts-uid-123" {
+		t.Errorf("UID = %s, want sts-uid-123", info.UID)
+	}
+	if info.Name != "test-statefulset" {
+		t.Errorf("Name = %s, want test-statefulset", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Replicas != 3 {
+		t.Errorf("Replicas = %d, want 3", info.Replicas)
+	}
+	if info.ReadyReplicas != 2 {
+		t.Errorf("ReadyReplicas = %d, want 2", info.ReadyReplicas)
+	}
+	if info.CurrentReplicas != 3 {
+		t.Errorf("CurrentReplicas = %d, want 3", info.CurrentReplicas)
+	}
+	if info.ServiceName != "test-headless" {
+		t.Errorf("ServiceName = %s, want test-headless", info.ServiceName)
+	}
+	if info.UpdateStrategy != "RollingUpdate" {
+		t.Errorf("UpdateStrategy = %s, want RollingUpdate", info.UpdateStrategy)
+	}
+	if info.Image != "postgres:14" {
+		t.Errorf("Image = %s, want postgres:14", info.Image)
+	}
+}
+
+func TestNewStatefulSetInfo_NilReplicas(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-statefulset",
+			Namespace: "default",
+		},
+		Spec: appsv1.StatefulSetSpec{
+			ServiceName: "test-svc",
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "postgres:14"},
+					},
+				},
+			},
+		},
+	}
+
+	info := NewStatefulSetInfo(sts)
+
+	if info.Replicas != 1 {
+		t.Errorf("Replicas = %d, want 1 (default)", info.Replicas)
 	}
 }
 
