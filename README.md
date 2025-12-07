@@ -5,8 +5,8 @@ Kubernetes operator that connects your cluster to the [Obsyk](https://obsyk.ai) 
 ## Features
 
 - **Deploy & Forget** - Single Custom Resource configures everything
-- **Real-time Sync** - Stream changes to Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Ingresses, and NetworkPolicies as they happen
-- **Secure by Design** - Read-only cluster access, OAuth2 JWT authentication
+- **Real-time Sync** - Stream changes to Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Ingresses, NetworkPolicies, ConfigMaps, and Secrets as they happen
+- **Secure by Design** - Read-only cluster access, OAuth2 JWT authentication. ConfigMap/Secret data values are never transmitted - only metadata and key names
 - **Lightweight** - Minimal resource footprint, efficient event-driven architecture
 
 ## Prerequisites
@@ -146,9 +146,13 @@ The operator requires **read-only** access to cluster resources:
 | Pods | core | list, watch |
 | Services | core | list, watch |
 | Nodes | core | list, watch |
+| ConfigMaps | core | list, watch |
+| Secrets | core | list, watch |
 | Deployments | apps | list, watch |
 | StatefulSets | apps | list, watch |
 | DaemonSets | apps | list, watch |
+| Jobs | batch | list, watch |
+| CronJobs | batch | list, watch |
 | Ingresses | networking.k8s.io | list, watch |
 | NetworkPolicies | networking.k8s.io | list, watch |
 
@@ -158,6 +162,7 @@ The operator requires **read-only** access to cluster resources:
 - Keys must be provided via Kubernetes Secret reference
 - Keys are read at runtime and never logged
 - All API communication uses TLS
+- **ConfigMap and Secret data values are NEVER transmitted** - only metadata and key names are collected
 
 ## Service Mesh Compatibility
 
