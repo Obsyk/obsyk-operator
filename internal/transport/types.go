@@ -30,6 +30,7 @@ const (
 	ResourceTypeNode        ResourceType = "Node"
 	ResourceTypeDeployment  ResourceType = "Deployment"
 	ResourceTypeStatefulSet ResourceType = "StatefulSet"
+	ResourceTypeDaemonSet   ResourceType = "DaemonSet"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -69,6 +70,9 @@ type SnapshotPayload struct {
 
 	// StatefulSets in the cluster.
 	StatefulSets []StatefulSetInfo `json:"statefulsets"`
+
+	// DaemonSets in the cluster.
+	DaemonSets []DaemonSetInfo `json:"daemonsets"`
 }
 
 // EventPayload represents a single resource change event.
@@ -112,6 +116,7 @@ type ResourceCounts struct {
 	Nodes        int32 `json:"nodes"`
 	Deployments  int32 `json:"deployments"`
 	StatefulSets int32 `json:"statefulsets"`
+	DaemonSets   int32 `json:"daemonsets"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -216,6 +221,24 @@ type StatefulSetInfo struct {
 	Selector        map[string]string `json:"selector,omitempty"`
 	Image           string            `json:"image,omitempty"`
 	K8sCreatedAt    *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// DaemonSetInfo contains relevant daemonset information.
+type DaemonSetInfo struct {
+	UID                    string            `json:"uid"`
+	Name                   string            `json:"name"`
+	Namespace              string            `json:"namespace"`
+	Labels                 map[string]string `json:"labels,omitempty"`
+	Annotations            map[string]string `json:"annotations,omitempty"`
+	DesiredNumberScheduled int32             `json:"desired_number_scheduled"`
+	CurrentNumberScheduled int32             `json:"current_number_scheduled"`
+	NumberReady            int32             `json:"number_ready"`
+	NumberAvailable        int32             `json:"number_available"`
+	UpdateStrategy         string            `json:"update_strategy,omitempty"`
+	Selector               map[string]string `json:"selector,omitempty"`
+	NodeSelector           map[string]string `json:"node_selector,omitempty"`
+	Image                  string            `json:"image,omitempty"`
+	K8sCreatedAt           *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -382,6 +405,43 @@ func NewStatefulSetInfo(sts *appsv1.StatefulSet) StatefulSetInfo {
 		Selector:        selector,
 		Image:           image,
 		K8sCreatedAt:    &createdAt,
+	}
+}
+
+// NewDaemonSetInfo creates DaemonSetInfo from a Kubernetes DaemonSet.
+func NewDaemonSetInfo(ds *appsv1.DaemonSet) DaemonSetInfo {
+	createdAt := ds.CreationTimestamp.Time
+
+	// Extract primary container image
+	var image string
+	if len(ds.Spec.Template.Spec.Containers) > 0 {
+		image = ds.Spec.Template.Spec.Containers[0].Image
+	}
+
+	// Get update strategy type
+	updateStrategy := string(ds.Spec.UpdateStrategy.Type)
+
+	// Convert selector to map
+	var selector map[string]string
+	if ds.Spec.Selector != nil {
+		selector = ds.Spec.Selector.MatchLabels
+	}
+
+	return DaemonSetInfo{
+		UID:                    string(ds.UID),
+		Name:                   ds.Name,
+		Namespace:              ds.Namespace,
+		Labels:                 ds.Labels,
+		Annotations:            filterAnnotations(ds.Annotations),
+		DesiredNumberScheduled: ds.Status.DesiredNumberScheduled,
+		CurrentNumberScheduled: ds.Status.CurrentNumberScheduled,
+		NumberReady:            ds.Status.NumberReady,
+		NumberAvailable:        ds.Status.NumberAvailable,
+		UpdateStrategy:         updateStrategy,
+		Selector:               selector,
+		NodeSelector:           ds.Spec.Template.Spec.NodeSelector,
+		Image:                  image,
+		K8sCreatedAt:           &createdAt,
 	}
 }
 
