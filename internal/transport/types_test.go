@@ -479,6 +479,94 @@ func TestNewStatefulSetInfo_NilReplicas(t *testing.T) {
 	}
 }
 
+func TestNewDaemonSetInfo(t *testing.T) {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-daemonset",
+			Namespace: "default",
+			UID:       "ds-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"app": "test"},
+			},
+			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
+				Type: appsv1.RollingUpdateDaemonSetStrategyType,
+			},
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "main", Image: "fluentd:v1.14"},
+					},
+					NodeSelector: map[string]string{"kubernetes.io/os": "linux"},
+				},
+			},
+		},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: 5,
+			CurrentNumberScheduled: 5,
+			NumberReady:            4,
+			NumberAvailable:        4,
+		},
+	}
+
+	info := NewDaemonSetInfo(ds)
+
+	if info.UID != "ds-uid-123" {
+		t.Errorf("UID = %s, want ds-uid-123", info.UID)
+	}
+	if info.Name != "test-daemonset" {
+		t.Errorf("Name = %s, want test-daemonset", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.DesiredNumberScheduled != 5 {
+		t.Errorf("DesiredNumberScheduled = %d, want 5", info.DesiredNumberScheduled)
+	}
+	if info.CurrentNumberScheduled != 5 {
+		t.Errorf("CurrentNumberScheduled = %d, want 5", info.CurrentNumberScheduled)
+	}
+	if info.NumberReady != 4 {
+		t.Errorf("NumberReady = %d, want 4", info.NumberReady)
+	}
+	if info.NumberAvailable != 4 {
+		t.Errorf("NumberAvailable = %d, want 4", info.NumberAvailable)
+	}
+	if info.UpdateStrategy != "RollingUpdate" {
+		t.Errorf("UpdateStrategy = %s, want RollingUpdate", info.UpdateStrategy)
+	}
+	if info.Image != "fluentd:v1.14" {
+		t.Errorf("Image = %s, want fluentd:v1.14", info.Image)
+	}
+	if info.NodeSelector["kubernetes.io/os"] != "linux" {
+		t.Errorf("NodeSelector = %v, want kubernetes.io/os=linux", info.NodeSelector)
+	}
+}
+
+func TestNewDaemonSetInfo_NoContainers(t *testing.T) {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-daemonset",
+			Namespace: "default",
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{},
+				},
+			},
+		},
+	}
+
+	info := NewDaemonSetInfo(ds)
+
+	if info.Image != "" {
+		t.Errorf("Image = %s, want empty", info.Image)
+	}
+}
+
 func TestFilterAnnotations(t *testing.T) {
 	testCases := []struct {
 		name        string
