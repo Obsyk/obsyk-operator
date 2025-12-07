@@ -46,6 +46,7 @@ const (
 	ResourceTypeClusterRole           ResourceType = "ClusterRole"
 	ResourceTypeRoleBinding           ResourceType = "RoleBinding"
 	ResourceTypeClusterRoleBinding    ResourceType = "ClusterRoleBinding"
+	ResourceTypeEvent                 ResourceType = "Event"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -124,6 +125,9 @@ type SnapshotPayload struct {
 
 	// ClusterRoleBindings in the cluster (cluster-scoped).
 	ClusterRoleBindings []RoleBindingInfo `json:"cluster_role_bindings"`
+
+	// Events in the cluster.
+	Events []EventInfo `json:"events"`
 }
 
 // EventPayload represents a single resource change event.
@@ -180,6 +184,7 @@ type ResourceCounts struct {
 	ClusterRoles        int32 `json:"cluster_roles"`
 	RoleBindings        int32 `json:"role_bindings"`
 	ClusterRoleBindings int32 `json:"cluster_role_bindings"`
+	Events              int32 `json:"events"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -539,6 +544,36 @@ type Subject struct {
 	Kind      string `json:"kind"` // User, Group, or ServiceAccount
 	Name      string `json:"name"`
 	Namespace string `json:"namespace,omitempty"` // Only for ServiceAccount
+}
+
+// EventInfo contains Kubernetes Event information for activity monitoring.
+type EventInfo struct {
+	UID            string          `json:"uid"`
+	Name           string          `json:"name"`
+	Namespace      string          `json:"namespace"`
+	Type           string          `json:"type"`   // Normal, Warning
+	Reason         string          `json:"reason"` // e.g., Scheduled, Pulled, Created, Started, Failed
+	Message        string          `json:"message"`
+	InvolvedObject ObjectReference `json:"involved_object"`
+	Source         EventSource     `json:"source"`
+	FirstTimestamp *time.Time      `json:"first_timestamp,omitempty"`
+	LastTimestamp  *time.Time      `json:"last_timestamp,omitempty"`
+	Count          int32           `json:"count"`
+	K8sCreatedAt   *time.Time      `json:"k8s_created_at,omitempty"`
+}
+
+// ObjectReference contains reference to the object the event is about.
+type ObjectReference struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	UID       string `json:"uid,omitempty"`
+}
+
+// EventSource contains the component that generated the event.
+type EventSource struct {
+	Component string `json:"component,omitempty"`
+	Host      string `json:"host,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -1416,6 +1451,44 @@ func NewClusterRoleBindingInfo(crb *rbacv1.ClusterRoleBinding) RoleBindingInfo {
 		Subjects:     subjects,
 		K8sCreatedAt: &createdAt,
 	}
+}
+
+// NewEventInfo creates EventInfo from a Kubernetes Event.
+func NewEventInfo(event *corev1.Event) EventInfo {
+	createdAt := event.CreationTimestamp.Time
+
+	info := EventInfo{
+		UID:       string(event.UID),
+		Name:      event.Name,
+		Namespace: event.Namespace,
+		Type:      event.Type,
+		Reason:    event.Reason,
+		Message:   event.Message,
+		InvolvedObject: ObjectReference{
+			Kind:      event.InvolvedObject.Kind,
+			Name:      event.InvolvedObject.Name,
+			Namespace: event.InvolvedObject.Namespace,
+			UID:       string(event.InvolvedObject.UID),
+		},
+		Source: EventSource{
+			Component: event.Source.Component,
+			Host:      event.Source.Host,
+		},
+		Count:        event.Count,
+		K8sCreatedAt: &createdAt,
+	}
+
+	// Handle timestamps - events can have FirstTimestamp/LastTimestamp or EventTime
+	if !event.FirstTimestamp.IsZero() {
+		t := event.FirstTimestamp.Time
+		info.FirstTimestamp = &t
+	}
+	if !event.LastTimestamp.IsZero() {
+		t := event.LastTimestamp.Time
+		info.LastTimestamp = &t
+	}
+
+	return info
 }
 
 // filterAnnotations removes potentially sensitive or noisy annotations.
