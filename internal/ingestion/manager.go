@@ -71,6 +71,7 @@ type Manager struct {
 	clusterroleIngester        *ClusterRoleIngester
 	rolebindingIngester        *RoleBindingIngester
 	clusterrolebindingIngester *ClusterRoleBindingIngester
+	eventIngester              *EventIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -152,6 +153,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.clusterroleIngester = NewClusterRoleIngester(m.informerFactory, ingesterCfg, m.log)
 	m.rolebindingIngester = NewRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
 	m.clusterrolebindingIngester = NewClusterRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
+	m.eventIngester = NewEventIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -173,6 +175,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.clusterroleIngester.RegisterHandlers()
 	m.rolebindingIngester.RegisterHandlers()
 	m.clusterrolebindingIngester.RegisterHandlers()
+	m.eventIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -495,6 +498,13 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing clusterrolebindings: %w", err)
 	}
 
+	// Get Events
+	eventLister := m.informerFactory.Core().V1().Events().Lister()
+	events, err := eventLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing events: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID:          m.config.ClusterUID,
@@ -517,6 +527,7 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		ClusterRoles:        make([]transport.RoleInfo, 0, len(clusterRoles)),
 		RoleBindings:        make([]transport.RoleBindingInfo, 0, len(roleBindings)),
 		ClusterRoleBindings: make([]transport.RoleBindingInfo, 0, len(clusterRoleBindings)),
+		Events:              make([]transport.EventInfo, 0, len(events)),
 	}
 
 	for _, ns := range namespaces {
@@ -594,6 +605,10 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, crb := range clusterRoleBindings {
 		payload.ClusterRoleBindings = append(payload.ClusterRoleBindings, transport.NewClusterRoleBindingInfo(crb))
+	}
+
+	for _, event := range events {
+		payload.Events = append(payload.Events, transport.NewEventInfo(event))
 	}
 
 	return payload, nil
