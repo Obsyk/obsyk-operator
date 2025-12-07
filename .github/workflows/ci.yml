@@ -20,16 +20,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           check-latest: true
 
-      - name: Set up Earthly
-        uses: earthly/actions-setup@v1
-        with:
-          version: v0.8.0
-
       - name: Run CI checks
-        run: earthly +ci
+        run: make ci
 
       - name: Run govulncheck
         run: |

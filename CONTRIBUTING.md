@@ -10,8 +10,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Prerequisites
 
-- Go 1.24+
-- Earthly
+- Go 1.25+
 - Docker (OrbStack recommended for Mac)
 - kubectl
 - Kind or Minikube (for local testing)
@@ -27,7 +26,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 2. **Verify the build works:**
    ```bash
-   earthly +ci
+   make ci
    ```
 
 3. **Create a local Kubernetes cluster:**
@@ -60,7 +59,7 @@ git checkout -b feature/GH-15-rate-limiting
    go test -race ./... -v
 
    # Run CI checks
-   earthly +ci
+   make ci
    ```
 4. **Ensure code is formatted:**
    ```bash

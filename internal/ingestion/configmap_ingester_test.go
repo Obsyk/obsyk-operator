@@ -183,7 +183,7 @@ func TestConfigMapIngester_OnDelete(t *testing.T) {
 func TestConfigMapIngester_ChannelFull(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
-	eventChan := make(chan ResourceEvent, 0) // Zero buffer - always full
+	eventChan := make(chan ResourceEvent) // Zero buffer - always full
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
