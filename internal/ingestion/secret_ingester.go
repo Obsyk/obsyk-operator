@@ -4,6 +4,8 @@
 package ingestion
 
 import (
+	"sync"
+
 	"github.com/go-logr/logr"
 	"github.com/obsyk/obsyk-operator/internal/transport"
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +23,7 @@ type SecretIngester struct {
 	config          IngesterConfig
 	log             logr.Logger
 	lastVersion     map[string]string // Track resourceVersion to skip duplicate updates
+	lastVersionMu   sync.RWMutex      // Protects lastVersion map from concurrent access
 }
 
 // NewSecretIngester creates a new Secret ingester.
@@ -57,7 +60,9 @@ func (i *SecretIngester) onAdd(obj interface{}) {
 
 	// Track version for deduplication
 	key := secret.Namespace + "/" + secret.Name
+	i.lastVersionMu.Lock()
 	i.lastVersion[key] = secret.ResourceVersion
+	i.lastVersionMu.Unlock()
 
 	i.sendEvent(transport.EventTypeAdded, secret)
 }
@@ -73,11 +78,14 @@ func (i *SecretIngester) onUpdate(oldObj, newObj interface{}) {
 
 	// Skip if resourceVersion hasn't changed (duplicate event)
 	key := secret.Namespace + "/" + secret.Name
+	i.lastVersionMu.Lock()
 	if i.lastVersion[key] == secret.ResourceVersion {
+		i.lastVersionMu.Unlock()
 		i.log.V(2).Info("skipping duplicate Secret update", "name", secret.Name, "namespace", secret.Namespace)
 		return
 	}
 	i.lastVersion[key] = secret.ResourceVersion
+	i.lastVersionMu.Unlock()
 
 	// SECURITY: Never log secret data - only log metadata
 	i.log.V(1).Info("Secret updated", "name", secret.Name, "namespace", secret.Namespace, "type", secret.Type)
@@ -105,7 +113,9 @@ func (i *SecretIngester) onDelete(obj interface{}) {
 
 	// Clean up version tracking
 	key := secret.Namespace + "/" + secret.Name
+	i.lastVersionMu.Lock()
 	delete(i.lastVersion, key)
+	i.lastVersionMu.Unlock()
 
 	i.sendDeleteEvent(secret)
 }
