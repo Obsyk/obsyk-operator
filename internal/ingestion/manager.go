@@ -55,6 +55,7 @@ type Manager struct {
 	podIngester       *PodIngester
 	serviceIngester   *ServiceIngester
 	namespaceIngester *NamespaceIngester
+	nodeIngester      *NodeIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -120,11 +121,13 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.podIngester = NewPodIngester(m.informerFactory, ingesterCfg, m.log)
 	m.serviceIngester = NewServiceIngester(m.informerFactory, ingesterCfg, m.log)
 	m.namespaceIngester = NewNamespaceIngester(m.informerFactory, ingesterCfg, m.log)
+	m.nodeIngester = NewNodeIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
 	m.serviceIngester.RegisterHandlers()
 	m.namespaceIngester.RegisterHandlers()
+	m.nodeIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -335,12 +338,20 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
 
+	// Get nodes
+	nodeLister := m.informerFactory.Core().V1().Nodes().Lister()
+	nodes, err := nodeLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing nodes: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID: m.config.ClusterUID,
 		Namespaces: make([]transport.NamespaceInfo, 0, len(namespaces)),
 		Pods:       make([]transport.PodInfo, 0, len(pods)),
 		Services:   make([]transport.ServiceInfo, 0, len(services)),
+		Nodes:      make([]transport.NodeInfo, 0, len(nodes)),
 	}
 
 	for _, ns := range namespaces {
@@ -353,6 +364,10 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, svc := range services {
 		payload.Services = append(payload.Services, transport.NewServiceInfo(svc))
+	}
+
+	for _, node := range nodes {
+		payload.Nodes = append(payload.Nodes, transport.NewNodeInfo(node))
 	}
 
 	return payload, nil
