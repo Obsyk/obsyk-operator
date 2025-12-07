@@ -52,15 +52,17 @@ type Manager struct {
 	limiter *rate.Limiter
 
 	// Individual ingesters
-	podIngester         *PodIngester
-	serviceIngester     *ServiceIngester
-	namespaceIngester   *NamespaceIngester
-	nodeIngester        *NodeIngester
-	deploymentIngester  *DeploymentIngester
-	statefulsetIngester *StatefulSetIngester
-	daemonsetIngester   *DaemonSetIngester
-	jobIngester         *JobIngester
-	cronjobIngester     *CronJobIngester
+	podIngester           *PodIngester
+	serviceIngester       *ServiceIngester
+	namespaceIngester     *NamespaceIngester
+	nodeIngester          *NodeIngester
+	deploymentIngester    *DeploymentIngester
+	statefulsetIngester   *StatefulSetIngester
+	daemonsetIngester     *DaemonSetIngester
+	jobIngester           *JobIngester
+	cronjobIngester       *CronJobIngester
+	ingressIngester       *IngressIngester
+	networkpolicyIngester *NetworkPolicyIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -132,6 +134,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.daemonsetIngester = NewDaemonSetIngester(m.informerFactory, ingesterCfg, m.log)
 	m.jobIngester = NewJobIngester(m.informerFactory, ingesterCfg, m.log)
 	m.cronjobIngester = NewCronJobIngester(m.informerFactory, ingesterCfg, m.log)
+	m.ingressIngester = NewIngressIngester(m.informerFactory, ingesterCfg, m.log)
+	m.networkpolicyIngester = NewNetworkPolicyIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -143,6 +147,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.daemonsetIngester.RegisterHandlers()
 	m.jobIngester.RegisterHandlers()
 	m.cronjobIngester.RegisterHandlers()
+	m.ingressIngester.RegisterHandlers()
+	m.networkpolicyIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -395,18 +401,34 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing cronjobs: %w", err)
 	}
 
+	// Get ingresses
+	ingLister := m.informerFactory.Networking().V1().Ingresses().Lister()
+	ingresses, err := ingLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing ingresses: %w", err)
+	}
+
+	// Get network policies
+	npLister := m.informerFactory.Networking().V1().NetworkPolicies().Lister()
+	networkPolicies, err := npLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing network policies: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
-		ClusterUID:   m.config.ClusterUID,
-		Namespaces:   make([]transport.NamespaceInfo, 0, len(namespaces)),
-		Pods:         make([]transport.PodInfo, 0, len(pods)),
-		Services:     make([]transport.ServiceInfo, 0, len(services)),
-		Nodes:        make([]transport.NodeInfo, 0, len(nodes)),
-		Deployments:  make([]transport.DeploymentInfo, 0, len(deployments)),
-		StatefulSets: make([]transport.StatefulSetInfo, 0, len(statefulsets)),
-		DaemonSets:   make([]transport.DaemonSetInfo, 0, len(daemonsets)),
-		Jobs:         make([]transport.JobInfo, 0, len(jobs)),
-		CronJobs:     make([]transport.CronJobInfo, 0, len(cronjobs)),
+		ClusterUID:      m.config.ClusterUID,
+		Namespaces:      make([]transport.NamespaceInfo, 0, len(namespaces)),
+		Pods:            make([]transport.PodInfo, 0, len(pods)),
+		Services:        make([]transport.ServiceInfo, 0, len(services)),
+		Nodes:           make([]transport.NodeInfo, 0, len(nodes)),
+		Deployments:     make([]transport.DeploymentInfo, 0, len(deployments)),
+		StatefulSets:    make([]transport.StatefulSetInfo, 0, len(statefulsets)),
+		DaemonSets:      make([]transport.DaemonSetInfo, 0, len(daemonsets)),
+		Jobs:            make([]transport.JobInfo, 0, len(jobs)),
+		CronJobs:        make([]transport.CronJobInfo, 0, len(cronjobs)),
+		Ingresses:       make([]transport.IngressInfo, 0, len(ingresses)),
+		NetworkPolicies: make([]transport.NetworkPolicyInfo, 0, len(networkPolicies)),
 	}
 
 	for _, ns := range namespaces {
@@ -443,6 +465,14 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, cj := range cronjobs {
 		payload.CronJobs = append(payload.CronJobs, transport.NewCronJobInfo(cj))
+	}
+
+	for _, ing := range ingresses {
+		payload.Ingresses = append(payload.Ingresses, transport.NewIngressInfo(ing))
+	}
+
+	for _, np := range networkPolicies {
+		payload.NetworkPolicies = append(payload.NetworkPolicies, transport.NewNetworkPolicyInfo(np))
 	}
 
 	return payload, nil

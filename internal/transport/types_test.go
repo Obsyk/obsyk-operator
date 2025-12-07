@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -795,5 +796,216 @@ func TestFilterAnnotations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewIngressInfo(t *testing.T) {
+	pathType := networkingv1.PathTypePrefix
+	ingressClassName := "nginx"
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-ingress",
+			Namespace: "default",
+			UID:       "ing-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: &ingressClassName,
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: "example.com",
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/api",
+									PathType: &pathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "api-service",
+											Port: networkingv1.ServiceBackendPort{
+												Number: 8080,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			TLS: []networkingv1.IngressTLS{
+				{
+					Hosts:      []string{"example.com"},
+					SecretName: "tls-secret",
+				},
+			},
+		},
+		Status: networkingv1.IngressStatus{
+			LoadBalancer: networkingv1.IngressLoadBalancerStatus{
+				Ingress: []networkingv1.IngressLoadBalancerIngress{
+					{IP: "192.168.1.1"},
+				},
+			},
+		},
+	}
+
+	info := NewIngressInfo(ing)
+
+	if info.UID != "ing-uid-123" {
+		t.Errorf("UID = %s, want ing-uid-123", info.UID)
+	}
+	if info.Name != "test-ingress" {
+		t.Errorf("Name = %s, want test-ingress", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.IngressClassName != "nginx" {
+		t.Errorf("IngressClassName = %s, want nginx", info.IngressClassName)
+	}
+	if len(info.Rules) != 1 {
+		t.Fatalf("Rules count = %d, want 1", len(info.Rules))
+	}
+	if info.Rules[0].Host != "example.com" {
+		t.Errorf("Rules[0].Host = %s, want example.com", info.Rules[0].Host)
+	}
+	if len(info.Rules[0].Paths) != 1 {
+		t.Fatalf("Rules[0].Paths count = %d, want 1", len(info.Rules[0].Paths))
+	}
+	if info.Rules[0].Paths[0].Path != "/api" {
+		t.Errorf("Rules[0].Paths[0].Path = %s, want /api", info.Rules[0].Paths[0].Path)
+	}
+	if info.Rules[0].Paths[0].ServiceName != "api-service" {
+		t.Errorf("Rules[0].Paths[0].ServiceName = %s, want api-service", info.Rules[0].Paths[0].ServiceName)
+	}
+	if info.Rules[0].Paths[0].ServicePort != 8080 {
+		t.Errorf("Rules[0].Paths[0].ServicePort = %d, want 8080", info.Rules[0].Paths[0].ServicePort)
+	}
+	if len(info.TLS) != 1 {
+		t.Fatalf("TLS count = %d, want 1", len(info.TLS))
+	}
+	if info.TLS[0].SecretName != "tls-secret" {
+		t.Errorf("TLS[0].SecretName = %s, want tls-secret", info.TLS[0].SecretName)
+	}
+	if len(info.LoadBalancerIPs) != 1 {
+		t.Fatalf("LoadBalancerIPs count = %d, want 1", len(info.LoadBalancerIPs))
+	}
+	if info.LoadBalancerIPs[0] != "192.168.1.1" {
+		t.Errorf("LoadBalancerIPs[0] = %s, want 192.168.1.1", info.LoadBalancerIPs[0])
+	}
+}
+
+func TestNewIngressInfo_Defaults(t *testing.T) {
+	// Test with minimal ingress (no rules, no TLS, no ingress class)
+	ing := &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minimal-ingress",
+			Namespace: "default",
+			UID:       "ing-uid-456",
+		},
+	}
+
+	info := NewIngressInfo(ing)
+
+	if info.IngressClassName != "" {
+		t.Errorf("IngressClassName = %s, want empty", info.IngressClassName)
+	}
+	if len(info.Rules) != 0 {
+		t.Errorf("Rules count = %d, want 0", len(info.Rules))
+	}
+	if len(info.TLS) != 0 {
+		t.Errorf("TLS count = %d, want 0", len(info.TLS))
+	}
+	if len(info.LoadBalancerIPs) != 0 {
+		t.Errorf("LoadBalancerIPs count = %d, want 0", len(info.LoadBalancerIPs))
+	}
+}
+
+func TestNewNetworkPolicyInfo(t *testing.T) {
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-netpol",
+			Namespace: "default",
+			UID:       "np-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "web",
+				},
+			},
+			PolicyTypes: []networkingv1.PolicyType{
+				networkingv1.PolicyTypeIngress,
+				networkingv1.PolicyTypeEgress,
+			},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{
+				{},
+			},
+			Egress: []networkingv1.NetworkPolicyEgressRule{
+				{},
+				{},
+			},
+		},
+	}
+
+	info := NewNetworkPolicyInfo(np)
+
+	if info.UID != "np-uid-123" {
+		t.Errorf("UID = %s, want np-uid-123", info.UID)
+	}
+	if info.Name != "test-netpol" {
+		t.Errorf("Name = %s, want test-netpol", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.PodSelector["app"] != "web" {
+		t.Errorf("PodSelector[app] = %s, want web", info.PodSelector["app"])
+	}
+	if len(info.PolicyTypes) != 2 {
+		t.Fatalf("PolicyTypes count = %d, want 2", len(info.PolicyTypes))
+	}
+	if info.PolicyTypes[0] != "Ingress" {
+		t.Errorf("PolicyTypes[0] = %s, want Ingress", info.PolicyTypes[0])
+	}
+	if info.PolicyTypes[1] != "Egress" {
+		t.Errorf("PolicyTypes[1] = %s, want Egress", info.PolicyTypes[1])
+	}
+	if info.IngressRules != 1 {
+		t.Errorf("IngressRules = %d, want 1", info.IngressRules)
+	}
+	if info.EgressRules != 2 {
+		t.Errorf("EgressRules = %d, want 2", info.EgressRules)
+	}
+}
+
+func TestNewNetworkPolicyInfo_Defaults(t *testing.T) {
+	// Test with minimal network policy
+	np := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minimal-netpol",
+			Namespace: "default",
+			UID:       "np-uid-456",
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+		},
+	}
+
+	info := NewNetworkPolicyInfo(np)
+
+	if info.PodSelector != nil {
+		t.Errorf("PodSelector = %v, want nil", info.PodSelector)
+	}
+	if len(info.PolicyTypes) != 0 {
+		t.Errorf("PolicyTypes count = %d, want 0", len(info.PolicyTypes))
+	}
+	if info.IngressRules != 0 {
+		t.Errorf("IngressRules = %d, want 0", info.IngressRules)
+	}
+	if info.EgressRules != 0 {
+		t.Errorf("EgressRules = %d, want 0", info.EgressRules)
 	}
 }
