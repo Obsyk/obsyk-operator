@@ -4,6 +4,7 @@
 package ingestion
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func TestServiceIngester_OnAdd(t *testing.T) {
 		},
 	}
 
-	_, err := clientset.CoreV1().Services("default").Create(nil, svc, metav1.CreateOptions{})
+	_, err := clientset.CoreV1().Services("default").Create(context.Background(), svc, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create service: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestServiceIngester_OnUpdate(t *testing.T) {
 	updatedSvc.ResourceVersion = "2"
 	updatedSvc.Labels = map[string]string{"updated": "true"}
 
-	_, err := clientset.CoreV1().Services("default").Update(nil, updatedSvc, metav1.UpdateOptions{})
+	_, err := clientset.CoreV1().Services("default").Update(context.Background(), updatedSvc, metav1.UpdateOptions{})
 	if err != nil {
 		t.Fatalf("failed to update service: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestServiceIngester_OnDelete(t *testing.T) {
 	}
 
 	// Delete the service
-	err := clientset.CoreV1().Services("default").Delete(nil, "test-svc", metav1.DeleteOptions{})
+	err := clientset.CoreV1().Services("default").Delete(context.Background(), "test-svc", metav1.DeleteOptions{})
 	if err != nil {
 		t.Fatalf("failed to delete service: %v", err)
 	}
