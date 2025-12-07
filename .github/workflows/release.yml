@@ -29,10 +29,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Earthly
-        uses: earthly/actions-setup@v1
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          version: v0.8.0
+          go-version: '1.25'
+          check-latest: true
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -55,17 +56,16 @@ jobs:
           echo "app=${APP_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Run CI checks
-        run: earthly +ci
+        run: make ci
 
       - name: Build and push Docker image
-        run: earthly --push +docker --VERSION=${{ steps.version.outputs.tag }}
+        run: |
+          make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+          make docker-push IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
 
       - name: Get image digest
         id: digest
         run: |
-          # Earthly pushes to registry but doesn't leave image locally with RepoDigests
-          # Pull the image to get the digest
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }} | cut -d'@' -f2)
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
           echo "Image digest: ${DIGEST}"

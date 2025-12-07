@@ -3,7 +3,6 @@
 
 # Build stage
 # Pinned digest for supply chain security (update periodically)
-# To update: docker manifest inspect golang:1.24-alpine | jq '.manifests[] | select(.platform.architecture=="amd64")'
 FROM golang:1.25-alpine@sha256:26111811bc967321e7b6f852e914d14bede324cd1accb7f81811929a6a57fea9 AS builder
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
@@ -27,7 +26,6 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager .
 
 # Runtime stage
 # Pinned digest for supply chain security (update periodically)
-# To update: docker manifest inspect gcr.io/distroless/static:nonroot | jq '.manifests[] | select(.platform.architecture=="amd64")'
 FROM gcr.io/distroless/static:nonroot@sha256:2b7c93f6d6648c11f0e80a48558c8f77885eb0445213b8e69a6a0d7c89fc6ae4
 WORKDIR /
 COPY --from=builder /workspace/manager .
