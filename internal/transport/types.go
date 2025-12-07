@@ -363,8 +363,8 @@ type ConfigMapInfo struct {
 	Namespace    string            `json:"namespace"`
 	Labels       map[string]string `json:"labels,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
-	DataKeys     []string          `json:"data_keys,omitempty"`     // Keys only, NO values
-	BinaryKeys   []string          `json:"binary_keys,omitempty"`   // BinaryData keys only, NO values
+	DataKeys     []string          `json:"data_keys,omitempty"`   // Keys only, NO values
+	BinaryKeys   []string          `json:"binary_keys,omitempty"` // BinaryData keys only, NO values
 	Immutable    bool              `json:"immutable"`
 	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }
@@ -379,8 +379,8 @@ type SecretInfo struct {
 	Namespace    string            `json:"namespace"`
 	Labels       map[string]string `json:"labels,omitempty"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
-	Type         string            `json:"type,omitempty"`         // e.g., kubernetes.io/tls, Opaque
-	DataKeys     []string          `json:"data_keys,omitempty"`    // Keys only, NEVER values
+	Type         string            `json:"type,omitempty"`      // e.g., kubernetes.io/tls, Opaque
+	DataKeys     []string          `json:"data_keys,omitempty"` // Keys only, NEVER values
 	Immutable    bool              `json:"immutable"`
 	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }

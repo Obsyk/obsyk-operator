@@ -34,7 +34,7 @@ func TestConfigMapIngester_OnAdd(t *testing.T) {
 			Labels:          map[string]string{"app": "test"},
 		},
 		Data: map[string]string{
-			"config.yaml":  "sensitive-value-should-not-be-sent",
+			"config.yaml":   "sensitive-value-should-not-be-sent",
 			"settings.json": "another-sensitive-value",
 		},
 		BinaryData: map[string][]byte{
