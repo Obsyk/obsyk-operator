@@ -77,7 +77,7 @@ func (n *NamespaceIngester) onUpdate(oldObj, newObj interface{}) {
 		"name", newNS.Name,
 		"uid", newNS.UID)
 
-	n.sendEvent(transport.EventTypeUpdated, newNS)
+	n.sendEvent(transport.EventTypeModified, newNS)
 }
 
 // onDelete handles Namespace deletion events.

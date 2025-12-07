@@ -122,8 +122,8 @@ func TestServiceIngester_OnUpdate(t *testing.T) {
 	// Wait for update event
 	select {
 	case event := <-eventChan:
-		if event.Type != transport.EventTypeUpdated {
-			t.Errorf("Type = %v, want %v", event.Type, transport.EventTypeUpdated)
+		if event.Type != transport.EventTypeModified {
+			t.Errorf("Type = %v, want %v", event.Type, transport.EventTypeModified)
 		}
 		if event.Kind != transport.ResourceTypeService {
 			t.Errorf("Kind = %v, want %v", event.Kind, transport.ResourceTypeService)

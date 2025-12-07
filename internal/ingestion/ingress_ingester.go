@@ -79,7 +79,7 @@ func (i *IngressIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newIng.Namespace,
 		"uid", newIng.UID)
 
-	i.sendEvent(transport.EventTypeUpdated, newIng)
+	i.sendEvent(transport.EventTypeModified, newIng)
 }
 
 // onDelete handles Ingress deletion events.
