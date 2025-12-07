@@ -77,6 +77,7 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
     release.yml               # Release automation
     e2e.yml                   # E2E tests on Kind cluster
 /docs/
+  API_CONTRACT.md             # Platform API contract and JSON schemas
   TEST_PLAN_GH11.md           # Event-driven streaming test plan
 /Makefile                     # Build automation
 /Dockerfile                   # Multi-stage Docker build
@@ -555,6 +556,8 @@ Examples:
 - `[GH-12] feat: add thread-safety to transport client and controller`
 
 ## Platform Communication Protocol
+
+For the complete API contract with JSON schemas for all 20 resource types, see [docs/API_CONTRACT.md](docs/API_CONTRACT.md).
 
 ### Endpoints
 
