@@ -128,7 +128,7 @@ func (n *NodeIngester) sendDeleteEvent(node *corev1.Node) {
 		Kind:      transport.ResourceTypeNode,
 		UID:       string(node.UID),
 		Name:      node.Name,
-		Namespace: "", // Nodes are cluster-scoped
+		Namespace: "",  // Nodes are cluster-scoped
 		Object:    nil, // No object data for deletes
 	}
 
