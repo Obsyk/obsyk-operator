@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,15 +26,17 @@ const (
 type ResourceType string
 
 const (
-	ResourceTypePod         ResourceType = "Pod"
-	ResourceTypeService     ResourceType = "Service"
-	ResourceTypeNamespace   ResourceType = "Namespace"
-	ResourceTypeNode        ResourceType = "Node"
-	ResourceTypeDeployment  ResourceType = "Deployment"
-	ResourceTypeStatefulSet ResourceType = "StatefulSet"
-	ResourceTypeDaemonSet   ResourceType = "DaemonSet"
-	ResourceTypeJob         ResourceType = "Job"
-	ResourceTypeCronJob     ResourceType = "CronJob"
+	ResourceTypePod           ResourceType = "Pod"
+	ResourceTypeService       ResourceType = "Service"
+	ResourceTypeNamespace     ResourceType = "Namespace"
+	ResourceTypeNode          ResourceType = "Node"
+	ResourceTypeDeployment    ResourceType = "Deployment"
+	ResourceTypeStatefulSet   ResourceType = "StatefulSet"
+	ResourceTypeDaemonSet     ResourceType = "DaemonSet"
+	ResourceTypeJob           ResourceType = "Job"
+	ResourceTypeCronJob       ResourceType = "CronJob"
+	ResourceTypeIngress       ResourceType = "Ingress"
+	ResourceTypeNetworkPolicy ResourceType = "NetworkPolicy"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -82,6 +85,12 @@ type SnapshotPayload struct {
 
 	// CronJobs in the cluster.
 	CronJobs []CronJobInfo `json:"cronjobs"`
+
+	// Ingresses in the cluster.
+	Ingresses []IngressInfo `json:"ingresses"`
+
+	// NetworkPolicies in the cluster.
+	NetworkPolicies []NetworkPolicyInfo `json:"network_policies"`
 }
 
 // EventPayload represents a single resource change event.
@@ -119,15 +128,17 @@ type HeartbeatPayload struct {
 
 // ResourceCounts holds counts of watched resources.
 type ResourceCounts struct {
-	Namespaces   int32 `json:"namespaces"`
-	Pods         int32 `json:"pods"`
-	Services     int32 `json:"services"`
-	Nodes        int32 `json:"nodes"`
-	Deployments  int32 `json:"deployments"`
-	StatefulSets int32 `json:"statefulsets"`
-	DaemonSets   int32 `json:"daemonsets"`
-	Jobs         int32 `json:"jobs"`
-	CronJobs     int32 `json:"cronjobs"`
+	Namespaces      int32 `json:"namespaces"`
+	Pods            int32 `json:"pods"`
+	Services        int32 `json:"services"`
+	Nodes           int32 `json:"nodes"`
+	Deployments     int32 `json:"deployments"`
+	StatefulSets    int32 `json:"statefulsets"`
+	DaemonSets      int32 `json:"daemonsets"`
+	Jobs            int32 `json:"jobs"`
+	CronJobs        int32 `json:"cronjobs"`
+	Ingresses       int32 `json:"ingresses"`
+	NetworkPolicies int32 `json:"network_policies"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -283,6 +294,54 @@ type CronJobInfo struct {
 	LastScheduleTime  *time.Time        `json:"last_schedule_time,omitempty"`
 	ActiveJobs        int32             `json:"active_jobs"`
 	K8sCreatedAt      *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// IngressInfo contains relevant ingress information.
+type IngressInfo struct {
+	UID              string            `json:"uid"`
+	Name             string            `json:"name"`
+	Namespace        string            `json:"namespace"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	IngressClassName string            `json:"ingress_class_name,omitempty"`
+	Rules            []IngressRule     `json:"rules,omitempty"`
+	TLS              []IngressTLS      `json:"tls,omitempty"`
+	LoadBalancerIPs  []string          `json:"load_balancer_ips,omitempty"`
+	K8sCreatedAt     *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// IngressRule contains ingress rule information.
+type IngressRule struct {
+	Host  string        `json:"host,omitempty"`
+	Paths []IngressPath `json:"paths,omitempty"`
+}
+
+// IngressPath contains ingress path information.
+type IngressPath struct {
+	Path        string `json:"path,omitempty"`
+	PathType    string `json:"path_type,omitempty"`
+	ServiceName string `json:"service_name,omitempty"`
+	ServicePort int32  `json:"service_port,omitempty"`
+}
+
+// IngressTLS contains ingress TLS information.
+type IngressTLS struct {
+	Hosts      []string `json:"hosts,omitempty"`
+	SecretName string   `json:"secret_name,omitempty"`
+}
+
+// NetworkPolicyInfo contains relevant network policy information.
+type NetworkPolicyInfo struct {
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	PodSelector  map[string]string `json:"pod_selector,omitempty"`
+	PolicyTypes  []string          `json:"policy_types,omitempty"`
+	IngressRules int               `json:"ingress_rules"`
+	EgressRules  int               `json:"egress_rules"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -601,6 +660,107 @@ func NewServiceInfo(svc *corev1.Service) ServiceInfo {
 		ClusterIP:    svc.Spec.ClusterIP,
 		Ports:        ports,
 		Selector:     svc.Spec.Selector,
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewIngressInfo creates IngressInfo from a Kubernetes Ingress.
+func NewIngressInfo(ing *networkingv1.Ingress) IngressInfo {
+	createdAt := ing.CreationTimestamp.Time
+
+	// Extract ingress class name
+	var ingressClassName string
+	if ing.Spec.IngressClassName != nil {
+		ingressClassName = *ing.Spec.IngressClassName
+	}
+
+	// Extract rules
+	rules := make([]IngressRule, 0, len(ing.Spec.Rules))
+	for _, r := range ing.Spec.Rules {
+		rule := IngressRule{
+			Host: r.Host,
+		}
+		if r.HTTP != nil {
+			paths := make([]IngressPath, 0, len(r.HTTP.Paths))
+			for _, p := range r.HTTP.Paths {
+				path := IngressPath{
+					Path: p.Path,
+				}
+				if p.PathType != nil {
+					path.PathType = string(*p.PathType)
+				}
+				if p.Backend.Service != nil {
+					path.ServiceName = p.Backend.Service.Name
+					if p.Backend.Service.Port.Number != 0 {
+						path.ServicePort = p.Backend.Service.Port.Number
+					}
+				}
+				paths = append(paths, path)
+			}
+			rule.Paths = paths
+		}
+		rules = append(rules, rule)
+	}
+
+	// Extract TLS
+	tls := make([]IngressTLS, 0, len(ing.Spec.TLS))
+	for _, t := range ing.Spec.TLS {
+		tls = append(tls, IngressTLS{
+			Hosts:      t.Hosts,
+			SecretName: t.SecretName,
+		})
+	}
+
+	// Extract load balancer IPs
+	var loadBalancerIPs []string
+	for _, ingress := range ing.Status.LoadBalancer.Ingress {
+		if ingress.IP != "" {
+			loadBalancerIPs = append(loadBalancerIPs, ingress.IP)
+		} else if ingress.Hostname != "" {
+			loadBalancerIPs = append(loadBalancerIPs, ingress.Hostname)
+		}
+	}
+
+	return IngressInfo{
+		UID:              string(ing.UID),
+		Name:             ing.Name,
+		Namespace:        ing.Namespace,
+		Labels:           ing.Labels,
+		Annotations:      filterAnnotations(ing.Annotations),
+		IngressClassName: ingressClassName,
+		Rules:            rules,
+		TLS:              tls,
+		LoadBalancerIPs:  loadBalancerIPs,
+		K8sCreatedAt:     &createdAt,
+	}
+}
+
+// NewNetworkPolicyInfo creates NetworkPolicyInfo from a Kubernetes NetworkPolicy.
+func NewNetworkPolicyInfo(np *networkingv1.NetworkPolicy) NetworkPolicyInfo {
+	createdAt := np.CreationTimestamp.Time
+
+	// Extract pod selector
+	var podSelector map[string]string
+	if np.Spec.PodSelector.MatchLabels != nil {
+		podSelector = np.Spec.PodSelector.MatchLabels
+	}
+
+	// Extract policy types
+	policyTypes := make([]string, 0, len(np.Spec.PolicyTypes))
+	for _, pt := range np.Spec.PolicyTypes {
+		policyTypes = append(policyTypes, string(pt))
+	}
+
+	return NetworkPolicyInfo{
+		UID:          string(np.UID),
+		Name:         np.Name,
+		Namespace:    np.Namespace,
+		Labels:       np.Labels,
+		Annotations:  filterAnnotations(np.Annotations),
+		PodSelector:  podSelector,
+		PolicyTypes:  policyTypes,
+		IngressRules: len(np.Spec.Ingress),
+		EgressRules:  len(np.Spec.Egress),
 		K8sCreatedAt: &createdAt,
 	}
 }

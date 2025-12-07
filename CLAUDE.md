@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services) to the Obsyk SaaS platform using event-driven delta streaming.
+Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Ingresses, NetworkPolicies) to the Obsyk SaaS platform using event-driven delta streaming.
 
 **This is a public repository** - customers install this operator in their Kubernetes clusters.
 
@@ -41,6 +41,12 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
     pod_ingester.go           # Pod SharedInformer event handler
     service_ingester.go       # Service SharedInformer event handler
     namespace_ingester.go     # Namespace SharedInformer event handler
+    node_ingester.go          # Node SharedInformer event handler
+    deployment_ingester.go    # Deployment SharedInformer event handler
+    statefulset_ingester.go   # StatefulSet SharedInformer event handler
+    daemonset_ingester.go     # DaemonSet SharedInformer event handler
+    ingress_ingester.go       # Ingress SharedInformer event handler
+    networkpolicy_ingester.go # NetworkPolicy SharedInformer event handler
     *_test.go                 # Unit tests for each component
     integration_test.go       # Integration tests with envtest
   /transport/
@@ -93,12 +99,14 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
 │  │ client_id    │───▶│  │          IngestionManager              │  │   │
 │  │ private_key  │    │  │  ┌─────────────────────────────────┐   │  │   │
 │  └──────────────┘    │  │  │  SharedInformerFactory          │   │  │   │
-│                      │  │  │  (Pod, Service, Namespace)      │   │  │   │
+│                      │  │  │  (Pod, Service, Namespace,      │   │  │   │
+│                      │  │  │   Node, Deploy, STS, DS,        │   │  │   │
+│                      │  │  │   Ingress, NetworkPolicy)       │   │  │   │
 │  ┌──────────────┐    │  │  └─────────────────────────────────┘   │  │   │
 │  │  Pods        │    │  │                 │                      │  │   │
 │  │  Services    │◀───│  │                 ▼                      │  │   │
 │  │  Namespaces  │    │  │  ┌─────────────────────────────────┐   │  │   │
-│  │  (watched)   │    │  │  │  Event Channel (buffered)       │   │  │   │
+│  │  Nodes, etc. │    │  │  │  Event Channel (buffered)       │   │  │   │
 │  └──────────────┘    │  │  │  ResourceEvent{Type,Kind,UID,..}│   │  │   │
 │                      │  │  └─────────────────────────────────┘   │  │   │
 │                      │  │                 │                      │  │   │
@@ -204,7 +212,7 @@ Event-driven resource watching using SharedInformerFactory:
 - Rate limiting for event sending (token bucket algorithm, default: 10/sec, burst: 20)
 - Graceful shutdown with event draining
 
-**Ingesters** (pod/service/namespace_ingester.go):
+**Ingesters** (pod/service/namespace/node/deployment/statefulset/daemonset/ingress/networkpolicy_ingester.go):
 - Implement `cache.ResourceEventHandler` interface
 - Non-blocking event sends (drop with warning if channel full)
 - Skip updates with same ResourceVersion (deduplication)
