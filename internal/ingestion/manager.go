@@ -58,6 +58,7 @@ type Manager struct {
 	nodeIngester        *NodeIngester
 	deploymentIngester  *DeploymentIngester
 	statefulsetIngester *StatefulSetIngester
+	daemonsetIngester   *DaemonSetIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -126,6 +127,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.nodeIngester = NewNodeIngester(m.informerFactory, ingesterCfg, m.log)
 	m.deploymentIngester = NewDeploymentIngester(m.informerFactory, ingesterCfg, m.log)
 	m.statefulsetIngester = NewStatefulSetIngester(m.informerFactory, ingesterCfg, m.log)
+	m.daemonsetIngester = NewDaemonSetIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -134,6 +136,7 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.nodeIngester.RegisterHandlers()
 	m.deploymentIngester.RegisterHandlers()
 	m.statefulsetIngester.RegisterHandlers()
+	m.daemonsetIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -365,6 +368,13 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing statefulsets: %w", err)
 	}
 
+	// Get daemonsets
+	dsLister := m.informerFactory.Apps().V1().DaemonSets().Lister()
+	daemonsets, err := dsLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing daemonsets: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID:   m.config.ClusterUID,
@@ -374,6 +384,7 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		Nodes:        make([]transport.NodeInfo, 0, len(nodes)),
 		Deployments:  make([]transport.DeploymentInfo, 0, len(deployments)),
 		StatefulSets: make([]transport.StatefulSetInfo, 0, len(statefulsets)),
+		DaemonSets:   make([]transport.DaemonSetInfo, 0, len(daemonsets)),
 	}
 
 	for _, ns := range namespaces {
@@ -398,6 +409,10 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, sts := range statefulsets {
 		payload.StatefulSets = append(payload.StatefulSets, transport.NewStatefulSetInfo(sts))
+	}
+
+	for _, ds := range daemonsets {
+		payload.DaemonSets = append(payload.DaemonSets, transport.NewDaemonSetInfo(ds))
 	}
 
 	return payload, nil
