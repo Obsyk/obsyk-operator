@@ -79,7 +79,7 @@ func (d *DeploymentIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newDeploy.Namespace,
 		"uid", newDeploy.UID)
 
-	d.sendEvent(transport.EventTypeUpdated, newDeploy)
+	d.sendEvent(transport.EventTypeModified, newDeploy)
 }
 
 // onDelete handles Deployment deletion events.

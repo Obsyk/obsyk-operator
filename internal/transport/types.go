@@ -18,9 +18,9 @@ import (
 type EventType string
 
 const (
-	EventTypeAdded   EventType = "ADDED"
-	EventTypeUpdated EventType = "UPDATED"
-	EventTypeDeleted EventType = "DELETED"
+	EventTypeAdded    EventType = "added"
+	EventTypeModified EventType = "modified"
+	EventTypeDeleted  EventType = "deleted"
 )
 
 // ResourceType represents the type of Kubernetes resource.

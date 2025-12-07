@@ -79,7 +79,7 @@ func (p *PodIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newPod.Namespace,
 		"uid", newPod.UID)
 
-	p.sendEvent(transport.EventTypeUpdated, newPod)
+	p.sendEvent(transport.EventTypeModified, newPod)
 }
 
 // onDelete handles Pod deletion events.

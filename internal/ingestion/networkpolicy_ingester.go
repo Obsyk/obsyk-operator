@@ -79,7 +79,7 @@ func (n *NetworkPolicyIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newNP.Namespace,
 		"uid", newNP.UID)
 
-	n.sendEvent(transport.EventTypeUpdated, newNP)
+	n.sendEvent(transport.EventTypeModified, newNP)
 }
 
 // onDelete handles NetworkPolicy deletion events.

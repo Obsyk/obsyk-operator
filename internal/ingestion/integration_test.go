@@ -193,7 +193,7 @@ func TestIntegration_UpdateDeleteFlow(t *testing.T) {
 	events := sender.getEvents()
 	foundUpdate := false
 	for _, event := range events {
-		if event.Type == string(transport.EventTypeUpdated) && event.Kind == string(transport.ResourceTypePod) {
+		if event.Type == string(transport.EventTypeModified) && event.Kind == string(transport.ResourceTypePod) {
 			foundUpdate = true
 			break
 		}

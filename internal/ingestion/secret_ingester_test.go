@@ -121,7 +121,7 @@ func TestSecretIngester_OnUpdate(t *testing.T) {
 
 	select {
 	case event := <-eventChan:
-		if event.Type != transport.EventTypeUpdated {
+		if event.Type != transport.EventTypeModified {
 			t.Errorf("Type = %s, want UPDATED", event.Type)
 		}
 		if event.Kind != transport.ResourceTypeSecret {

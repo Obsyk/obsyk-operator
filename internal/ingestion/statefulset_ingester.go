@@ -79,7 +79,7 @@ func (s *StatefulSetIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newSts.Namespace,
 		"uid", newSts.UID)
 
-	s.sendEvent(transport.EventTypeUpdated, newSts)
+	s.sendEvent(transport.EventTypeModified, newSts)
 }
 
 // onDelete handles StatefulSet deletion events.
