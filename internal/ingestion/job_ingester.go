@@ -79,7 +79,7 @@ func (j *JobIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newJob.Namespace,
 		"uid", newJob.UID)
 
-	j.sendEvent(transport.EventTypeUpdated, newJob)
+	j.sendEvent(transport.EventTypeModified, newJob)
 }
 
 // onDelete handles Job deletion events.

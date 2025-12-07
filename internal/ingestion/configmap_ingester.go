@@ -75,7 +75,7 @@ func (i *ConfigMapIngester) onUpdate(oldObj, newObj interface{}) {
 	i.lastVersion[key] = cm.ResourceVersion
 
 	i.log.V(1).Info("ConfigMap updated", "name", cm.Name, "namespace", cm.Namespace)
-	i.sendEvent(transport.EventTypeUpdated, cm)
+	i.sendEvent(transport.EventTypeModified, cm)
 }
 
 // onDelete handles ConfigMap delete events.

@@ -77,7 +77,7 @@ func (n *NodeIngester) onUpdate(oldObj, newObj interface{}) {
 		"name", newNode.Name,
 		"uid", newNode.UID)
 
-	n.sendEvent(transport.EventTypeUpdated, newNode)
+	n.sendEvent(transport.EventTypeModified, newNode)
 }
 
 // onDelete handles Node deletion events.

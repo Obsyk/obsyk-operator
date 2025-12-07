@@ -82,7 +82,7 @@ func (e *EventIngester) onUpdate(oldObj, newObj interface{}) {
 		"reason", newEvent.Reason,
 		"count", newEvent.Count)
 
-	e.sendEvent(transport.EventTypeUpdated, newEvent)
+	e.sendEvent(transport.EventTypeModified, newEvent)
 }
 
 // onDelete handles Event deletion events.

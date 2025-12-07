@@ -79,7 +79,7 @@ func (r *RoleIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newRole.Namespace,
 		"uid", newRole.UID)
 
-	r.sendEvent(transport.EventTypeUpdated, newRole)
+	r.sendEvent(transport.EventTypeModified, newRole)
 }
 
 // onDelete handles Role deletion events.

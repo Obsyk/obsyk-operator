@@ -80,7 +80,7 @@ func (i *PVCIngester) onUpdate(oldObj, newObj interface{}) {
 		"uid", newPVC.UID,
 		"phase", newPVC.Status.Phase)
 
-	i.sendEvent(transport.EventTypeUpdated, newPVC)
+	i.sendEvent(transport.EventTypeModified, newPVC)
 }
 
 // onDelete handles PVC deletion events.

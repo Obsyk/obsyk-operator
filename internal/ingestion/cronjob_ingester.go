@@ -79,7 +79,7 @@ func (c *CronJobIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newCJ.Namespace,
 		"uid", newCJ.UID)
 
-	c.sendEvent(transport.EventTypeUpdated, newCJ)
+	c.sendEvent(transport.EventTypeModified, newCJ)
 }
 
 // onDelete handles CronJob deletion events.

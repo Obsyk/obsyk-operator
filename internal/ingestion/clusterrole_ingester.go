@@ -77,7 +77,7 @@ func (c *ClusterRoleIngester) onUpdate(oldObj, newObj interface{}) {
 		"name", newClusterRole.Name,
 		"uid", newClusterRole.UID)
 
-	c.sendEvent(transport.EventTypeUpdated, newClusterRole)
+	c.sendEvent(transport.EventTypeModified, newClusterRole)
 }
 
 // onDelete handles ClusterRole deletion events.

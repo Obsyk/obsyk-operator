@@ -79,7 +79,7 @@ func (r *RoleBindingIngester) onUpdate(oldObj, newObj interface{}) {
 		"namespace", newRB.Namespace,
 		"uid", newRB.UID)
 
-	r.sendEvent(transport.EventTypeUpdated, newRB)
+	r.sendEvent(transport.EventTypeModified, newRB)
 }
 
 // onDelete handles RoleBinding deletion events.

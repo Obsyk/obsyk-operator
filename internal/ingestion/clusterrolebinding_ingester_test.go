@@ -154,8 +154,8 @@ func TestClusterRoleBindingIngester_OnUpdate(t *testing.T) {
 
 	select {
 	case event := <-eventChan:
-		if event.Type != transport.EventTypeUpdated {
-			t.Errorf("Type = %v, want %v", event.Type, transport.EventTypeUpdated)
+		if event.Type != transport.EventTypeModified {
+			t.Errorf("Type = %v, want %v", event.Type, transport.EventTypeModified)
 		}
 		if event.Kind != transport.ResourceTypeClusterRoleBinding {
 			t.Errorf("Kind = %v, want %v", event.Kind, transport.ResourceTypeClusterRoleBinding)
