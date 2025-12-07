@@ -187,8 +187,8 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		agent.Status.LastSyncTime = &now
 	}
 
-	// Update resource counts
-	counts, err := r.getResourceCounts(ctx)
+	// Update resource counts from ingestion manager if available
+	counts, err := r.getResourceCounts(ctx, ac)
 	if err != nil {
 		logger.Error(err, "failed to get resource counts")
 	} else {
@@ -407,7 +407,40 @@ func (r *ObsykAgentReconciler) sendSnapshotFromManager(ctx context.Context, agen
 }
 
 // getResourceCounts returns counts of watched resources.
-func (r *ObsykAgentReconciler) getResourceCounts(ctx context.Context) (*obsykv1.ResourceCounts, error) {
+// If ingestion manager is available, uses it for all 20 resource types.
+// Otherwise falls back to basic counting of namespaces, pods, and services.
+func (r *ObsykAgentReconciler) getResourceCounts(ctx context.Context, ac *agentClient) (*obsykv1.ResourceCounts, error) {
+	// Try to get counts from ingestion manager if available
+	if ac != nil && ac.ingestionManager != nil && ac.ingestionManager.IsStarted() {
+		counts, err := ac.ingestionManager.GetResourceCounts()
+		if err == nil {
+			return &obsykv1.ResourceCounts{
+				Namespaces:          int32(counts.Namespaces),
+				Pods:                int32(counts.Pods),
+				Services:            int32(counts.Services),
+				Nodes:               int32(counts.Nodes),
+				Deployments:         int32(counts.Deployments),
+				StatefulSets:        int32(counts.StatefulSets),
+				DaemonSets:          int32(counts.DaemonSets),
+				Jobs:                int32(counts.Jobs),
+				CronJobs:            int32(counts.CronJobs),
+				Ingresses:           int32(counts.Ingresses),
+				NetworkPolicies:     int32(counts.NetworkPolicies),
+				ConfigMaps:          int32(counts.ConfigMaps),
+				Secrets:             int32(counts.Secrets),
+				PVCs:                int32(counts.PVCs),
+				ServiceAccounts:     int32(counts.ServiceAccounts),
+				Roles:               int32(counts.Roles),
+				ClusterRoles:        int32(counts.ClusterRoles),
+				RoleBindings:        int32(counts.RoleBindings),
+				ClusterRoleBindings: int32(counts.ClusterRoleBindings),
+				Events:              int32(counts.Events),
+			}, nil
+		}
+		// Fall through to basic counting if manager fails
+	}
+
+	// Fallback: basic counting via API (only namespaces, pods, services)
 	namespaces := &corev1.NamespaceList{}
 	if err := r.List(ctx, namespaces); err != nil {
 		return nil, err
