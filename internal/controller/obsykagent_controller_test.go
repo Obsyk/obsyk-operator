@@ -258,7 +258,7 @@ func TestReconciler_ReconcileNotFound(t *testing.T) {
 	if err != nil {
 		t.Errorf("Reconcile returned error: %v", err)
 	}
-	if result.Requeue {
+	if !result.IsZero() {
 		t.Error("expected no requeue for deleted resource")
 	}
 

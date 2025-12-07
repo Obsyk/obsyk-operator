@@ -184,7 +184,7 @@ func TestSecretIngester_OnDelete(t *testing.T) {
 func TestSecretIngester_ChannelFull(t *testing.T) {
 	clientset := fake.NewSimpleClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
-	eventChan := make(chan ResourceEvent, 0) // Zero buffer - always full
+	eventChan := make(chan ResourceEvent) // Zero buffer - always full
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
