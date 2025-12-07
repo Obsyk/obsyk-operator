@@ -52,20 +52,25 @@ type Manager struct {
 	limiter *rate.Limiter
 
 	// Individual ingesters
-	podIngester           *PodIngester
-	serviceIngester       *ServiceIngester
-	namespaceIngester     *NamespaceIngester
-	nodeIngester          *NodeIngester
-	deploymentIngester    *DeploymentIngester
-	statefulsetIngester   *StatefulSetIngester
-	daemonsetIngester     *DaemonSetIngester
-	jobIngester           *JobIngester
-	cronjobIngester       *CronJobIngester
-	ingressIngester       *IngressIngester
-	networkpolicyIngester *NetworkPolicyIngester
-	configmapIngester     *ConfigMapIngester
-	secretIngester        *SecretIngester
-	pvcIngester           *PVCIngester
+	podIngester                *PodIngester
+	serviceIngester            *ServiceIngester
+	namespaceIngester          *NamespaceIngester
+	nodeIngester               *NodeIngester
+	deploymentIngester         *DeploymentIngester
+	statefulsetIngester        *StatefulSetIngester
+	daemonsetIngester          *DaemonSetIngester
+	jobIngester                *JobIngester
+	cronjobIngester            *CronJobIngester
+	ingressIngester            *IngressIngester
+	networkpolicyIngester      *NetworkPolicyIngester
+	configmapIngester          *ConfigMapIngester
+	secretIngester             *SecretIngester
+	pvcIngester                *PVCIngester
+	serviceaccountIngester     *ServiceAccountIngester
+	roleIngester               *RoleIngester
+	clusterroleIngester        *ClusterRoleIngester
+	rolebindingIngester        *RoleBindingIngester
+	clusterrolebindingIngester *ClusterRoleBindingIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -142,6 +147,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.configmapIngester = NewConfigMapIngester(m.informerFactory, ingesterCfg, m.log)
 	m.secretIngester = NewSecretIngester(m.informerFactory, ingesterCfg, m.log)
 	m.pvcIngester = NewPVCIngester(m.informerFactory, ingesterCfg, m.log)
+	m.serviceaccountIngester = NewServiceAccountIngester(m.informerFactory, ingesterCfg, m.log)
+	m.roleIngester = NewRoleIngester(m.informerFactory, ingesterCfg, m.log)
+	m.clusterroleIngester = NewClusterRoleIngester(m.informerFactory, ingesterCfg, m.log)
+	m.rolebindingIngester = NewRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
+	m.clusterrolebindingIngester = NewClusterRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -158,6 +168,11 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.configmapIngester.RegisterHandlers()
 	m.secretIngester.RegisterHandlers()
 	m.pvcIngester.RegisterHandlers()
+	m.serviceaccountIngester.RegisterHandlers()
+	m.roleIngester.RegisterHandlers()
+	m.clusterroleIngester.RegisterHandlers()
+	m.rolebindingIngester.RegisterHandlers()
+	m.clusterrolebindingIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -445,23 +460,63 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing pvcs: %w", err)
 	}
 
+	// Get ServiceAccounts
+	saLister := m.informerFactory.Core().V1().ServiceAccounts().Lister()
+	serviceaccounts, err := saLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
+	}
+
+	// Get Roles
+	roleLister := m.informerFactory.Rbac().V1().Roles().Lister()
+	roles, err := roleLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing roles: %w", err)
+	}
+
+	// Get ClusterRoles
+	clusterRoleLister := m.informerFactory.Rbac().V1().ClusterRoles().Lister()
+	clusterRoles, err := clusterRoleLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing clusterroles: %w", err)
+	}
+
+	// Get RoleBindings
+	rbLister := m.informerFactory.Rbac().V1().RoleBindings().Lister()
+	roleBindings, err := rbLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing rolebindings: %w", err)
+	}
+
+	// Get ClusterRoleBindings
+	crbLister := m.informerFactory.Rbac().V1().ClusterRoleBindings().Lister()
+	clusterRoleBindings, err := crbLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing clusterrolebindings: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
-		ClusterUID:      m.config.ClusterUID,
-		Namespaces:      make([]transport.NamespaceInfo, 0, len(namespaces)),
-		Pods:            make([]transport.PodInfo, 0, len(pods)),
-		Services:        make([]transport.ServiceInfo, 0, len(services)),
-		Nodes:           make([]transport.NodeInfo, 0, len(nodes)),
-		Deployments:     make([]transport.DeploymentInfo, 0, len(deployments)),
-		StatefulSets:    make([]transport.StatefulSetInfo, 0, len(statefulsets)),
-		DaemonSets:      make([]transport.DaemonSetInfo, 0, len(daemonsets)),
-		Jobs:            make([]transport.JobInfo, 0, len(jobs)),
-		CronJobs:        make([]transport.CronJobInfo, 0, len(cronjobs)),
-		Ingresses:       make([]transport.IngressInfo, 0, len(ingresses)),
-		NetworkPolicies: make([]transport.NetworkPolicyInfo, 0, len(networkPolicies)),
-		ConfigMaps:      make([]transport.ConfigMapInfo, 0, len(configmaps)),
-		Secrets:         make([]transport.SecretInfo, 0, len(secrets)),
-		PVCs:            make([]transport.PVCInfo, 0, len(pvcs)),
+		ClusterUID:          m.config.ClusterUID,
+		Namespaces:          make([]transport.NamespaceInfo, 0, len(namespaces)),
+		Pods:                make([]transport.PodInfo, 0, len(pods)),
+		Services:            make([]transport.ServiceInfo, 0, len(services)),
+		Nodes:               make([]transport.NodeInfo, 0, len(nodes)),
+		Deployments:         make([]transport.DeploymentInfo, 0, len(deployments)),
+		StatefulSets:        make([]transport.StatefulSetInfo, 0, len(statefulsets)),
+		DaemonSets:          make([]transport.DaemonSetInfo, 0, len(daemonsets)),
+		Jobs:                make([]transport.JobInfo, 0, len(jobs)),
+		CronJobs:            make([]transport.CronJobInfo, 0, len(cronjobs)),
+		Ingresses:           make([]transport.IngressInfo, 0, len(ingresses)),
+		NetworkPolicies:     make([]transport.NetworkPolicyInfo, 0, len(networkPolicies)),
+		ConfigMaps:          make([]transport.ConfigMapInfo, 0, len(configmaps)),
+		Secrets:             make([]transport.SecretInfo, 0, len(secrets)),
+		PVCs:                make([]transport.PVCInfo, 0, len(pvcs)),
+		ServiceAccounts:     make([]transport.ServiceAccountInfo, 0, len(serviceaccounts)),
+		Roles:               make([]transport.RoleInfo, 0, len(roles)),
+		ClusterRoles:        make([]transport.RoleInfo, 0, len(clusterRoles)),
+		RoleBindings:        make([]transport.RoleBindingInfo, 0, len(roleBindings)),
+		ClusterRoleBindings: make([]transport.RoleBindingInfo, 0, len(clusterRoleBindings)),
 	}
 
 	for _, ns := range namespaces {
@@ -519,6 +574,26 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, pvc := range pvcs {
 		payload.PVCs = append(payload.PVCs, transport.NewPVCInfo(pvc))
+	}
+
+	for _, sa := range serviceaccounts {
+		payload.ServiceAccounts = append(payload.ServiceAccounts, transport.NewServiceAccountInfo(sa))
+	}
+
+	for _, role := range roles {
+		payload.Roles = append(payload.Roles, transport.NewRoleInfo(role))
+	}
+
+	for _, cr := range clusterRoles {
+		payload.ClusterRoles = append(payload.ClusterRoles, transport.NewClusterRoleInfo(cr))
+	}
+
+	for _, rb := range roleBindings {
+		payload.RoleBindings = append(payload.RoleBindings, transport.NewRoleBindingInfo(rb))
+	}
+
+	for _, crb := range clusterRoleBindings {
+		payload.ClusterRoleBindings = append(payload.ClusterRoleBindings, transport.NewClusterRoleBindingInfo(crb))
 	}
 
 	return payload, nil
