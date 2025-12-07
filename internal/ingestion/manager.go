@@ -613,3 +613,112 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	return payload, nil
 }
+
+// ResourceCounts holds counts of watched resources.
+type ResourceCounts struct {
+	Namespaces          int
+	Pods                int
+	Services            int
+	Nodes               int
+	Deployments         int
+	StatefulSets        int
+	DaemonSets          int
+	Jobs                int
+	CronJobs            int
+	Ingresses           int
+	NetworkPolicies     int
+	ConfigMaps          int
+	Secrets             int
+	PVCs                int
+	ServiceAccounts     int
+	Roles               int
+	ClusterRoles        int
+	RoleBindings        int
+	ClusterRoleBindings int
+	Events              int
+}
+
+// GetResourceCounts returns counts of all watched resources from informer caches.
+// This is more efficient than GetCurrentState when only counts are needed.
+func (m *Manager) GetResourceCounts() (*ResourceCounts, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if !m.started || m.informerFactory == nil {
+		return nil, fmt.Errorf("manager not started")
+	}
+
+	counts := &ResourceCounts{}
+
+	// Core resources
+	if namespaces, err := m.informerFactory.Core().V1().Namespaces().Lister().List(labels.Everything()); err == nil {
+		counts.Namespaces = len(namespaces)
+	}
+	if pods, err := m.informerFactory.Core().V1().Pods().Lister().List(labels.Everything()); err == nil {
+		counts.Pods = len(pods)
+	}
+	if services, err := m.informerFactory.Core().V1().Services().Lister().List(labels.Everything()); err == nil {
+		counts.Services = len(services)
+	}
+	if nodes, err := m.informerFactory.Core().V1().Nodes().Lister().List(labels.Everything()); err == nil {
+		counts.Nodes = len(nodes)
+	}
+	if configmaps, err := m.informerFactory.Core().V1().ConfigMaps().Lister().List(labels.Everything()); err == nil {
+		counts.ConfigMaps = len(configmaps)
+	}
+	if secrets, err := m.informerFactory.Core().V1().Secrets().Lister().List(labels.Everything()); err == nil {
+		counts.Secrets = len(secrets)
+	}
+	if pvcs, err := m.informerFactory.Core().V1().PersistentVolumeClaims().Lister().List(labels.Everything()); err == nil {
+		counts.PVCs = len(pvcs)
+	}
+	if serviceaccounts, err := m.informerFactory.Core().V1().ServiceAccounts().Lister().List(labels.Everything()); err == nil {
+		counts.ServiceAccounts = len(serviceaccounts)
+	}
+	if events, err := m.informerFactory.Core().V1().Events().Lister().List(labels.Everything()); err == nil {
+		counts.Events = len(events)
+	}
+
+	// Apps resources
+	if deployments, err := m.informerFactory.Apps().V1().Deployments().Lister().List(labels.Everything()); err == nil {
+		counts.Deployments = len(deployments)
+	}
+	if statefulsets, err := m.informerFactory.Apps().V1().StatefulSets().Lister().List(labels.Everything()); err == nil {
+		counts.StatefulSets = len(statefulsets)
+	}
+	if daemonsets, err := m.informerFactory.Apps().V1().DaemonSets().Lister().List(labels.Everything()); err == nil {
+		counts.DaemonSets = len(daemonsets)
+	}
+
+	// Batch resources
+	if jobs, err := m.informerFactory.Batch().V1().Jobs().Lister().List(labels.Everything()); err == nil {
+		counts.Jobs = len(jobs)
+	}
+	if cronjobs, err := m.informerFactory.Batch().V1().CronJobs().Lister().List(labels.Everything()); err == nil {
+		counts.CronJobs = len(cronjobs)
+	}
+
+	// Networking resources
+	if ingresses, err := m.informerFactory.Networking().V1().Ingresses().Lister().List(labels.Everything()); err == nil {
+		counts.Ingresses = len(ingresses)
+	}
+	if networkpolicies, err := m.informerFactory.Networking().V1().NetworkPolicies().Lister().List(labels.Everything()); err == nil {
+		counts.NetworkPolicies = len(networkpolicies)
+	}
+
+	// RBAC resources
+	if roles, err := m.informerFactory.Rbac().V1().Roles().Lister().List(labels.Everything()); err == nil {
+		counts.Roles = len(roles)
+	}
+	if clusterroles, err := m.informerFactory.Rbac().V1().ClusterRoles().Lister().List(labels.Everything()); err == nil {
+		counts.ClusterRoles = len(clusterroles)
+	}
+	if rolebindings, err := m.informerFactory.Rbac().V1().RoleBindings().Lister().List(labels.Everything()); err == nil {
+		counts.RoleBindings = len(rolebindings)
+	}
+	if clusterrolebindings, err := m.informerFactory.Rbac().V1().ClusterRoleBindings().Lister().List(labels.Everything()); err == nil {
+		counts.ClusterRoleBindings = len(clusterrolebindings)
+	}
+
+	return counts, nil
+}
