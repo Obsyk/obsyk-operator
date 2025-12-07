@@ -5,7 +5,7 @@ Kubernetes operator that connects your cluster to the [Obsyk](https://obsyk.ai) 
 ## Features
 
 - **Deploy & Forget** - Single Custom Resource configures everything
-- **Real-time Sync** - Stream Namespace, Pod, and Service changes as they happen
+- **Real-time Sync** - Stream changes to Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Ingresses, and NetworkPolicies as they happen
 - **Secure by Design** - Read-only cluster access, OAuth2 JWT authentication
 - **Lightweight** - Minimal resource footprint, efficient event-driven architecture
 
@@ -140,11 +140,17 @@ The operator uses **OAuth2 JWT Bearer** authentication (RFC 7523):
 
 The operator requires **read-only** access to cluster resources:
 
-| Resource | Verbs |
-|----------|-------|
-| Namespaces | list, watch |
-| Pods | list, watch |
-| Services | list, watch |
+| Resource | API Group | Verbs |
+|----------|-----------|-------|
+| Namespaces | core | list, watch |
+| Pods | core | list, watch |
+| Services | core | list, watch |
+| Nodes | core | list, watch |
+| Deployments | apps | list, watch |
+| StatefulSets | apps | list, watch |
+| DaemonSets | apps | list, watch |
+| Ingresses | networking.k8s.io | list, watch |
+| NetworkPolicies | networking.k8s.io | list, watch |
 
 ### Credential Security
 
@@ -236,6 +242,12 @@ status:
     namespaces: 10
     pods: 100
     services: 20
+    nodes: 5
+    deployments: 30
+    statefulsets: 5
+    daemonsets: 8
+    ingresses: 15
+    networkPolicies: 12
 ```
 
 ### Logs
