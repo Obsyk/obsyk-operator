@@ -312,57 +312,6 @@ func (r *ObsykAgentReconciler) getClusterUID(ctx context.Context) (string, error
 	return string(ns.UID), nil
 }
 
-// sendSnapshot sends a full cluster state snapshot.
-func (r *ObsykAgentReconciler) sendSnapshot(ctx context.Context, agent *obsykv1.ObsykAgent, client *transport.Client) error {
-	logger := log.FromContext(ctx)
-	logger.Info("sending initial snapshot")
-
-	// List all namespaces
-	namespaces := &corev1.NamespaceList{}
-	if err := r.List(ctx, namespaces); err != nil {
-		return fmt.Errorf("listing namespaces: %w", err)
-	}
-
-	// List all pods
-	pods := &corev1.PodList{}
-	if err := r.List(ctx, pods); err != nil {
-		return fmt.Errorf("listing pods: %w", err)
-	}
-
-	// List all services
-	services := &corev1.ServiceList{}
-	if err := r.List(ctx, services); err != nil {
-		return fmt.Errorf("listing services: %w", err)
-	}
-
-	// Build snapshot payload
-	payload := &transport.SnapshotPayload{
-		ClusterUID:   agent.Status.ClusterUID,
-		ClusterName:  agent.Spec.ClusterName,
-		AgentVersion: "0.1.0", // TODO: get from build info
-		Namespaces:   make([]transport.NamespaceInfo, 0, len(namespaces.Items)),
-		Pods:         make([]transport.PodInfo, 0, len(pods.Items)),
-		Services:     make([]transport.ServiceInfo, 0, len(services.Items)),
-	}
-
-	for i := range namespaces.Items {
-		payload.Namespaces = append(payload.Namespaces, transport.NewNamespaceInfo(&namespaces.Items[i]))
-	}
-	for i := range pods.Items {
-		payload.Pods = append(payload.Pods, transport.NewPodInfo(&pods.Items[i]))
-	}
-	for i := range services.Items {
-		payload.Services = append(payload.Services, transport.NewServiceInfo(&services.Items[i]))
-	}
-
-	logger.Info("snapshot prepared",
-		"namespaces", len(payload.Namespaces),
-		"pods", len(payload.Pods),
-		"services", len(payload.Services))
-
-	return client.SendSnapshot(ctx, payload)
-}
-
 // sendHeartbeat sends a periodic health check to the platform.
 func (r *ObsykAgentReconciler) sendHeartbeat(ctx context.Context, agent *obsykv1.ObsykAgent, client *transport.Client) error {
 	logger := log.FromContext(ctx)
