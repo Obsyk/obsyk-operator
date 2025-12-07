@@ -110,8 +110,23 @@ rules:
     verbs:
       - list
       - watch
-  # Note: Secret access is granted via Role (namespace-scoped) for least privilege
-  # See role.yaml for secret access in the operator namespace only
+  # ConfigMap metadata collection (keys only, never values)
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+  # Secret metadata collection (keys only, NEVER values - security critical)
+  # Note: The operator only collects metadata and key names, never secret data
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - list
+      - watch
   # Leader election
   - apiGroups:
       - coordination.k8s.io

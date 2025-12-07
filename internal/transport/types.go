@@ -37,6 +37,8 @@ const (
 	ResourceTypeCronJob       ResourceType = "CronJob"
 	ResourceTypeIngress       ResourceType = "Ingress"
 	ResourceTypeNetworkPolicy ResourceType = "NetworkPolicy"
+	ResourceTypeConfigMap     ResourceType = "ConfigMap"
+	ResourceTypeSecret        ResourceType = "Secret"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -91,6 +93,12 @@ type SnapshotPayload struct {
 
 	// NetworkPolicies in the cluster.
 	NetworkPolicies []NetworkPolicyInfo `json:"network_policies"`
+
+	// ConfigMaps in the cluster (metadata only, no data values).
+	ConfigMaps []ConfigMapInfo `json:"configmaps"`
+
+	// Secrets in the cluster (metadata only, NEVER data values).
+	Secrets []SecretInfo `json:"secrets"`
 }
 
 // EventPayload represents a single resource change event.
@@ -139,6 +147,8 @@ type ResourceCounts struct {
 	CronJobs        int32 `json:"cronjobs"`
 	Ingresses       int32 `json:"ingresses"`
 	NetworkPolicies int32 `json:"network_policies"`
+	ConfigMaps      int32 `json:"configmaps"`
+	Secrets         int32 `json:"secrets"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -341,6 +351,37 @@ type NetworkPolicyInfo struct {
 	PolicyTypes  []string          `json:"policy_types,omitempty"`
 	IngressRules int               `json:"ingress_rules"`
 	EgressRules  int               `json:"egress_rules"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// ConfigMapInfo contains ConfigMap metadata.
+// SECURITY: This struct intentionally contains only metadata and data KEYS.
+// Data VALUES are NEVER collected or transmitted to protect sensitive configuration.
+type ConfigMapInfo struct {
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	DataKeys     []string          `json:"data_keys,omitempty"`   // Keys only, NO values
+	BinaryKeys   []string          `json:"binary_keys,omitempty"` // BinaryData keys only, NO values
+	Immutable    bool              `json:"immutable"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// SecretInfo contains Secret metadata.
+// SECURITY: This struct intentionally contains only metadata and data KEYS.
+// Data VALUES are NEVER collected or transmitted - this is critical for security.
+// Secret data must never leave the cluster through this operator.
+type SecretInfo struct {
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	Type         string            `json:"type,omitempty"`      // e.g., kubernetes.io/tls, Opaque
+	DataKeys     []string          `json:"data_keys,omitempty"` // Keys only, NEVER values
+	Immutable    bool              `json:"immutable"`
 	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
@@ -761,6 +802,84 @@ func NewNetworkPolicyInfo(np *networkingv1.NetworkPolicy) NetworkPolicyInfo {
 		PolicyTypes:  policyTypes,
 		IngressRules: len(np.Spec.Ingress),
 		EgressRules:  len(np.Spec.Egress),
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewConfigMapInfo creates ConfigMapInfo from a Kubernetes ConfigMap.
+// SECURITY: This function extracts only metadata and data KEYS - never values.
+// This is intentional to prevent leaking sensitive configuration data.
+func NewConfigMapInfo(cm *corev1.ConfigMap) ConfigMapInfo {
+	createdAt := cm.CreationTimestamp.Time
+
+	// Extract data keys only - NEVER extract values
+	var dataKeys []string
+	if cm.Data != nil {
+		dataKeys = make([]string, 0, len(cm.Data))
+		for k := range cm.Data {
+			dataKeys = append(dataKeys, k)
+		}
+	}
+
+	// Extract binary data keys only - NEVER extract values
+	var binaryKeys []string
+	if cm.BinaryData != nil {
+		binaryKeys = make([]string, 0, len(cm.BinaryData))
+		for k := range cm.BinaryData {
+			binaryKeys = append(binaryKeys, k)
+		}
+	}
+
+	// Get immutable status
+	immutable := false
+	if cm.Immutable != nil {
+		immutable = *cm.Immutable
+	}
+
+	return ConfigMapInfo{
+		UID:          string(cm.UID),
+		Name:         cm.Name,
+		Namespace:    cm.Namespace,
+		Labels:       cm.Labels,
+		Annotations:  filterAnnotations(cm.Annotations),
+		DataKeys:     dataKeys,
+		BinaryKeys:   binaryKeys,
+		Immutable:    immutable,
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewSecretInfo creates SecretInfo from a Kubernetes Secret.
+// SECURITY: This function extracts only metadata and data KEYS - NEVER values.
+// This is CRITICAL for security - secret data must never leave the cluster.
+func NewSecretInfo(secret *corev1.Secret) SecretInfo {
+	createdAt := secret.CreationTimestamp.Time
+
+	// Extract data keys only - NEVER extract values
+	// This is critical for security - we only send key names, never the actual secret data
+	var dataKeys []string
+	if secret.Data != nil {
+		dataKeys = make([]string, 0, len(secret.Data))
+		for k := range secret.Data {
+			dataKeys = append(dataKeys, k)
+		}
+	}
+
+	// Get immutable status
+	immutable := false
+	if secret.Immutable != nil {
+		immutable = *secret.Immutable
+	}
+
+	return SecretInfo{
+		UID:          string(secret.UID),
+		Name:         secret.Name,
+		Namespace:    secret.Namespace,
+		Labels:       secret.Labels,
+		Annotations:  filterAnnotations(secret.Annotations),
+		Type:         string(secret.Type),
+		DataKeys:     dataKeys,
+		Immutable:    immutable,
 		K8sCreatedAt: &createdAt,
 	}
 }
