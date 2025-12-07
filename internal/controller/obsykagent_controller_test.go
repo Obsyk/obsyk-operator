@@ -373,7 +373,7 @@ func TestReconciler_GetResourceCounts(t *testing.T) {
 
 	reconciler := NewObsykAgentReconciler(fakeClient, fakeClient, scheme, nil)
 
-	counts, err := reconciler.getResourceCounts(context.Background())
+	counts, err := reconciler.getResourceCounts(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("getResourceCounts failed: %v", err)
 	}

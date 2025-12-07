@@ -127,6 +127,57 @@ type ResourceCounts struct {
 
 	// Services is the count of services being watched.
 	Services int32 `json:"services,omitempty"`
+
+	// Nodes is the count of nodes being watched.
+	Nodes int32 `json:"nodes,omitempty"`
+
+	// Deployments is the count of deployments being watched.
+	Deployments int32 `json:"deployments,omitempty"`
+
+	// StatefulSets is the count of statefulsets being watched.
+	StatefulSets int32 `json:"statefulSets,omitempty"`
+
+	// DaemonSets is the count of daemonsets being watched.
+	DaemonSets int32 `json:"daemonSets,omitempty"`
+
+	// Jobs is the count of jobs being watched.
+	Jobs int32 `json:"jobs,omitempty"`
+
+	// CronJobs is the count of cronjobs being watched.
+	CronJobs int32 `json:"cronJobs,omitempty"`
+
+	// Ingresses is the count of ingresses being watched.
+	Ingresses int32 `json:"ingresses,omitempty"`
+
+	// NetworkPolicies is the count of network policies being watched.
+	NetworkPolicies int32 `json:"networkPolicies,omitempty"`
+
+	// ConfigMaps is the count of configmaps being watched.
+	ConfigMaps int32 `json:"configMaps,omitempty"`
+
+	// Secrets is the count of secrets being watched.
+	Secrets int32 `json:"secrets,omitempty"`
+
+	// PVCs is the count of persistent volume claims being watched.
+	PVCs int32 `json:"pvcs,omitempty"`
+
+	// ServiceAccounts is the count of service accounts being watched.
+	ServiceAccounts int32 `json:"serviceAccounts,omitempty"`
+
+	// Roles is the count of roles being watched.
+	Roles int32 `json:"roles,omitempty"`
+
+	// ClusterRoles is the count of cluster roles being watched.
+	ClusterRoles int32 `json:"clusterRoles,omitempty"`
+
+	// RoleBindings is the count of role bindings being watched.
+	RoleBindings int32 `json:"roleBindings,omitempty"`
+
+	// ClusterRoleBindings is the count of cluster role bindings being watched.
+	ClusterRoleBindings int32 `json:"clusterRoleBindings,omitempty"`
+
+	// Events is the count of events being watched.
+	Events int32 `json:"events,omitempty"`
 }
 
 // +kubebuilder:object:root=true
