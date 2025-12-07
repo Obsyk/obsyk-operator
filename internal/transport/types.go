@@ -7,6 +7,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -31,6 +32,8 @@ const (
 	ResourceTypeDeployment  ResourceType = "Deployment"
 	ResourceTypeStatefulSet ResourceType = "StatefulSet"
 	ResourceTypeDaemonSet   ResourceType = "DaemonSet"
+	ResourceTypeJob         ResourceType = "Job"
+	ResourceTypeCronJob     ResourceType = "CronJob"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -73,6 +76,12 @@ type SnapshotPayload struct {
 
 	// DaemonSets in the cluster.
 	DaemonSets []DaemonSetInfo `json:"daemonsets"`
+
+	// Jobs in the cluster.
+	Jobs []JobInfo `json:"jobs"`
+
+	// CronJobs in the cluster.
+	CronJobs []CronJobInfo `json:"cronjobs"`
 }
 
 // EventPayload represents a single resource change event.
@@ -117,6 +126,8 @@ type ResourceCounts struct {
 	Deployments  int32 `json:"deployments"`
 	StatefulSets int32 `json:"statefulsets"`
 	DaemonSets   int32 `json:"daemonsets"`
+	Jobs         int32 `json:"jobs"`
+	CronJobs     int32 `json:"cronjobs"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -239,6 +250,39 @@ type DaemonSetInfo struct {
 	NodeSelector           map[string]string `json:"node_selector,omitempty"`
 	Image                  string            `json:"image,omitempty"`
 	K8sCreatedAt           *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// JobInfo contains relevant job information.
+type JobInfo struct {
+	UID            string            `json:"uid"`
+	Name           string            `json:"name"`
+	Namespace      string            `json:"namespace"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	Annotations    map[string]string `json:"annotations,omitempty"`
+	Completions    int32             `json:"completions"`
+	Parallelism    int32             `json:"parallelism"`
+	Succeeded      int32             `json:"succeeded"`
+	Failed         int32             `json:"failed"`
+	Active         int32             `json:"active"`
+	StartTime      *time.Time        `json:"start_time,omitempty"`
+	CompletionTime *time.Time        `json:"completion_time,omitempty"`
+	OwnerRef       string            `json:"owner_ref,omitempty"` // CronJob name if owned
+	K8sCreatedAt   *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// CronJobInfo contains relevant cronjob information.
+type CronJobInfo struct {
+	UID               string            `json:"uid"`
+	Name              string            `json:"name"`
+	Namespace         string            `json:"namespace"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	Annotations       map[string]string `json:"annotations,omitempty"`
+	Schedule          string            `json:"schedule"`
+	Suspend           bool              `json:"suspend"`
+	ConcurrencyPolicy string            `json:"concurrency_policy,omitempty"`
+	LastScheduleTime  *time.Time        `json:"last_schedule_time,omitempty"`
+	ActiveJobs        int32             `json:"active_jobs"`
+	K8sCreatedAt      *time.Time        `json:"k8s_created_at,omitempty"`
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -442,6 +486,95 @@ func NewDaemonSetInfo(ds *appsv1.DaemonSet) DaemonSetInfo {
 		NodeSelector:           ds.Spec.Template.Spec.NodeSelector,
 		Image:                  image,
 		K8sCreatedAt:           &createdAt,
+	}
+}
+
+// NewJobInfo creates JobInfo from a Kubernetes Job.
+func NewJobInfo(job *batchv1.Job) JobInfo {
+	createdAt := job.CreationTimestamp.Time
+
+	// Get completions - defaults to 1 if not specified
+	completions := int32(1)
+	if job.Spec.Completions != nil {
+		completions = *job.Spec.Completions
+	}
+
+	// Get parallelism - defaults to 1 if not specified
+	parallelism := int32(1)
+	if job.Spec.Parallelism != nil {
+		parallelism = *job.Spec.Parallelism
+	}
+
+	// Get start time
+	var startTime *time.Time
+	if job.Status.StartTime != nil {
+		t := job.Status.StartTime.Time
+		startTime = &t
+	}
+
+	// Get completion time
+	var completionTime *time.Time
+	if job.Status.CompletionTime != nil {
+		t := job.Status.CompletionTime.Time
+		completionTime = &t
+	}
+
+	// Get owner reference (CronJob name if owned by one)
+	var ownerRef string
+	for _, ref := range job.OwnerReferences {
+		if ref.Kind == "CronJob" {
+			ownerRef = ref.Name
+			break
+		}
+	}
+
+	return JobInfo{
+		UID:            string(job.UID),
+		Name:           job.Name,
+		Namespace:      job.Namespace,
+		Labels:         job.Labels,
+		Annotations:    filterAnnotations(job.Annotations),
+		Completions:    completions,
+		Parallelism:    parallelism,
+		Succeeded:      job.Status.Succeeded,
+		Failed:         job.Status.Failed,
+		Active:         job.Status.Active,
+		StartTime:      startTime,
+		CompletionTime: completionTime,
+		OwnerRef:       ownerRef,
+		K8sCreatedAt:   &createdAt,
+	}
+}
+
+// NewCronJobInfo creates CronJobInfo from a Kubernetes CronJob.
+func NewCronJobInfo(cj *batchv1.CronJob) CronJobInfo {
+	createdAt := cj.CreationTimestamp.Time
+
+	// Get suspend status - defaults to false if not specified
+	suspend := false
+	if cj.Spec.Suspend != nil {
+		suspend = *cj.Spec.Suspend
+	}
+
+	// Get last schedule time
+	var lastScheduleTime *time.Time
+	if cj.Status.LastScheduleTime != nil {
+		t := cj.Status.LastScheduleTime.Time
+		lastScheduleTime = &t
+	}
+
+	return CronJobInfo{
+		UID:               string(cj.UID),
+		Name:              cj.Name,
+		Namespace:         cj.Namespace,
+		Labels:            cj.Labels,
+		Annotations:       filterAnnotations(cj.Annotations),
+		Schedule:          cj.Spec.Schedule,
+		Suspend:           suspend,
+		ConcurrencyPolicy: string(cj.Spec.ConcurrencyPolicy),
+		LastScheduleTime:  lastScheduleTime,
+		ActiveJobs:        int32(len(cj.Status.Active)),
+		K8sCreatedAt:      &createdAt,
 	}
 }
 
