@@ -1009,3 +1009,199 @@ func TestNewNetworkPolicyInfo_Defaults(t *testing.T) {
 		t.Errorf("EgressRules = %d, want 0", info.EgressRules)
 	}
 }
+
+func TestNewConfigMapInfo(t *testing.T) {
+	immutable := true
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: "default",
+			UID:       "cm-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Data: map[string]string{
+			"config.yaml":   "sensitive-value-should-not-be-included",
+			"settings.json": "another-sensitive-value",
+		},
+		BinaryData: map[string][]byte{
+			"binary.dat": []byte("binary-data"),
+		},
+		Immutable: &immutable,
+	}
+
+	info := NewConfigMapInfo(cm)
+
+	if info.UID != "cm-uid-123" {
+		t.Errorf("UID = %s, want cm-uid-123", info.UID)
+	}
+	if info.Name != "test-configmap" {
+		t.Errorf("Name = %s, want test-configmap", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	// SECURITY: Verify we have keys but NOT values
+	if len(info.DataKeys) != 2 {
+		t.Errorf("DataKeys count = %d, want 2", len(info.DataKeys))
+	}
+	if len(info.BinaryKeys) != 1 {
+		t.Errorf("BinaryKeys count = %d, want 1", len(info.BinaryKeys))
+	}
+	if !info.Immutable {
+		t.Error("Immutable should be true")
+	}
+
+	// SECURITY: Verify values are NOT present in keys
+	for _, key := range info.DataKeys {
+		if key == "sensitive-value-should-not-be-included" {
+			t.Fatalf("SECURITY VIOLATION: Data value found in DataKeys")
+		}
+	}
+}
+
+func TestNewConfigMapInfo_Defaults(t *testing.T) {
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minimal-configmap",
+			Namespace: "default",
+			UID:       "cm-uid-456",
+		},
+	}
+
+	info := NewConfigMapInfo(cm)
+
+	if info.DataKeys != nil {
+		t.Errorf("DataKeys should be nil, got %v", info.DataKeys)
+	}
+	if info.BinaryKeys != nil {
+		t.Errorf("BinaryKeys should be nil, got %v", info.BinaryKeys)
+	}
+	if info.Immutable {
+		t.Error("Immutable should be false (default)")
+	}
+}
+
+func TestNewSecretInfo(t *testing.T) {
+	immutable := true
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "default",
+			UID:       "secret-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Type: corev1.SecretTypeTLS,
+		Data: map[string][]byte{
+			"tls.crt": []byte("SENSITIVE-CERTIFICATE-DATA"),
+			"tls.key": []byte("SENSITIVE-PRIVATE-KEY"),
+		},
+		Immutable: &immutable,
+	}
+
+	info := NewSecretInfo(secret)
+
+	if info.UID != "secret-uid-123" {
+		t.Errorf("UID = %s, want secret-uid-123", info.UID)
+	}
+	if info.Name != "test-secret" {
+		t.Errorf("Name = %s, want test-secret", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Type != "kubernetes.io/tls" {
+		t.Errorf("Type = %s, want kubernetes.io/tls", info.Type)
+	}
+	// SECURITY: Verify we have keys but NOT values
+	if len(info.DataKeys) != 2 {
+		t.Errorf("DataKeys count = %d, want 2", len(info.DataKeys))
+	}
+	if !info.Immutable {
+		t.Error("Immutable should be true")
+	}
+
+	// SECURITY CRITICAL: Verify sensitive values are NOT present
+	for _, key := range info.DataKeys {
+		if key == "SENSITIVE-CERTIFICATE-DATA" {
+			t.Fatalf("SECURITY VIOLATION: Secret data value found in DataKeys")
+		}
+		if key == "SENSITIVE-PRIVATE-KEY" {
+			t.Fatalf("SECURITY VIOLATION: Secret data value found in DataKeys")
+		}
+	}
+}
+
+func TestNewSecretInfo_Defaults(t *testing.T) {
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "minimal-secret",
+			Namespace: "default",
+			UID:       "secret-uid-456",
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+
+	info := NewSecretInfo(secret)
+
+	if info.DataKeys != nil {
+		t.Errorf("DataKeys should be nil, got %v", info.DataKeys)
+	}
+	if info.Immutable {
+		t.Error("Immutable should be false (default)")
+	}
+	if info.Type != "Opaque" {
+		t.Errorf("Type = %s, want Opaque", info.Type)
+	}
+}
+
+// SECURITY TEST: Verify no secret data values can ever be leaked
+func TestNewSecretInfo_SecurityNoDataLeakage(t *testing.T) {
+	// Create a secret with highly sensitive data
+	sensitivePassword := "SUPER-SECRET-DATABASE-PASSWORD-12345"
+	sensitiveKey := "PRIVATE-KEY-THAT-MUST-NEVER-LEAK"
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "sensitive-secret",
+			Namespace: "production",
+			UID:       "secret-uid-sensitive",
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"password":    []byte(sensitivePassword),
+			"private-key": []byte(sensitiveKey),
+		},
+	}
+
+	info := NewSecretInfo(secret)
+
+	// Verify we only have key names
+	if len(info.DataKeys) != 2 {
+		t.Errorf("Expected 2 data keys, got %d", len(info.DataKeys))
+	}
+
+	// CRITICAL SECURITY CHECK: Ensure sensitive values are not present anywhere
+	foundPassword := false
+	foundKey := false
+	for _, k := range info.DataKeys {
+		if k == "password" {
+			foundPassword = true
+		}
+		if k == "private-key" {
+			foundKey = true
+		}
+		// These checks should NEVER fail if the code is correct
+		if k == sensitivePassword {
+			t.Fatalf("SECURITY VIOLATION: Sensitive password value found in DataKeys!")
+		}
+		if k == sensitiveKey {
+			t.Fatalf("SECURITY VIOLATION: Sensitive private key value found in DataKeys!")
+		}
+	}
+
+	if !foundPassword {
+		t.Error("Expected 'password' key in DataKeys")
+	}
+	if !foundKey {
+		t.Error("Expected 'private-key' key in DataKeys")
+	}
+}

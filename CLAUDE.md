@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Ingresses, NetworkPolicies) to the Obsyk SaaS platform using event-driven delta streaming.
+Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Ingresses, NetworkPolicies, ConfigMaps, Secrets) to the Obsyk SaaS platform using event-driven delta streaming.
+
+**Security Note**: ConfigMap and Secret ingestion collects only metadata and data keys - never values. This is critical for security.
 
 **This is a public repository** - customers install this operator in their Kubernetes clusters.
 
@@ -47,6 +49,10 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
     daemonset_ingester.go     # DaemonSet SharedInformer event handler
     ingress_ingester.go       # Ingress SharedInformer event handler
     networkpolicy_ingester.go # NetworkPolicy SharedInformer event handler
+    job_ingester.go           # Job SharedInformer event handler
+    cronjob_ingester.go       # CronJob SharedInformer event handler
+    configmap_ingester.go     # ConfigMap SharedInformer event handler (metadata only)
+    secret_ingester.go        # Secret SharedInformer event handler (metadata only, NEVER values)
     *_test.go                 # Unit tests for each component
     integration_test.go       # Integration tests with envtest
   /transport/
