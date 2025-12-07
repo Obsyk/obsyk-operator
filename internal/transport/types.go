@@ -10,6 +10,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,6 +41,11 @@ const (
 	ResourceTypeConfigMap             ResourceType = "ConfigMap"
 	ResourceTypeSecret                ResourceType = "Secret"
 	ResourceTypePersistentVolumeClaim ResourceType = "PersistentVolumeClaim"
+	ResourceTypeServiceAccount        ResourceType = "ServiceAccount"
+	ResourceTypeRole                  ResourceType = "Role"
+	ResourceTypeClusterRole           ResourceType = "ClusterRole"
+	ResourceTypeRoleBinding           ResourceType = "RoleBinding"
+	ResourceTypeClusterRoleBinding    ResourceType = "ClusterRoleBinding"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -103,6 +109,21 @@ type SnapshotPayload struct {
 
 	// PersistentVolumeClaims in the cluster.
 	PVCs []PVCInfo `json:"pvcs"`
+
+	// ServiceAccounts in the cluster.
+	ServiceAccounts []ServiceAccountInfo `json:"service_accounts"`
+
+	// Roles in the cluster (namespaced).
+	Roles []RoleInfo `json:"roles"`
+
+	// ClusterRoles in the cluster (cluster-scoped).
+	ClusterRoles []RoleInfo `json:"cluster_roles"`
+
+	// RoleBindings in the cluster (namespaced).
+	RoleBindings []RoleBindingInfo `json:"role_bindings"`
+
+	// ClusterRoleBindings in the cluster (cluster-scoped).
+	ClusterRoleBindings []RoleBindingInfo `json:"cluster_role_bindings"`
 }
 
 // EventPayload represents a single resource change event.
@@ -140,20 +161,25 @@ type HeartbeatPayload struct {
 
 // ResourceCounts holds counts of watched resources.
 type ResourceCounts struct {
-	Namespaces      int32 `json:"namespaces"`
-	Pods            int32 `json:"pods"`
-	Services        int32 `json:"services"`
-	Nodes           int32 `json:"nodes"`
-	Deployments     int32 `json:"deployments"`
-	StatefulSets    int32 `json:"statefulsets"`
-	DaemonSets      int32 `json:"daemonsets"`
-	Jobs            int32 `json:"jobs"`
-	CronJobs        int32 `json:"cronjobs"`
-	Ingresses       int32 `json:"ingresses"`
-	NetworkPolicies int32 `json:"network_policies"`
-	ConfigMaps      int32 `json:"configmaps"`
-	Secrets         int32 `json:"secrets"`
-	PVCs            int32 `json:"pvcs"`
+	Namespaces          int32 `json:"namespaces"`
+	Pods                int32 `json:"pods"`
+	Services            int32 `json:"services"`
+	Nodes               int32 `json:"nodes"`
+	Deployments         int32 `json:"deployments"`
+	StatefulSets        int32 `json:"statefulsets"`
+	DaemonSets          int32 `json:"daemonsets"`
+	Jobs                int32 `json:"jobs"`
+	CronJobs            int32 `json:"cronjobs"`
+	Ingresses           int32 `json:"ingresses"`
+	NetworkPolicies     int32 `json:"network_policies"`
+	ConfigMaps          int32 `json:"configmaps"`
+	Secrets             int32 `json:"secrets"`
+	PVCs                int32 `json:"pvcs"`
+	ServiceAccounts     int32 `json:"service_accounts"`
+	Roles               int32 `json:"roles"`
+	ClusterRoles        int32 `json:"cluster_roles"`
+	RoleBindings        int32 `json:"role_bindings"`
+	ClusterRoleBindings int32 `json:"cluster_role_bindings"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -404,6 +430,58 @@ type PVCInfo struct {
 	Phase            string            `json:"phase,omitempty"`           // Pending, Bound, Lost
 	VolumeMode       string            `json:"volume_mode,omitempty"`     // Filesystem, Block
 	K8sCreatedAt     *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// ServiceAccountInfo contains relevant ServiceAccount information.
+type ServiceAccountInfo struct {
+	UID                          string            `json:"uid"`
+	Name                         string            `json:"name"`
+	Namespace                    string            `json:"namespace"`
+	Labels                       map[string]string `json:"labels,omitempty"`
+	Annotations                  map[string]string `json:"annotations,omitempty"`
+	Secrets                      []string          `json:"secrets,omitempty"`            // Secret names only
+	ImagePullSecrets             []string          `json:"image_pull_secrets,omitempty"` // Secret names only
+	AutomountServiceAccountToken *bool             `json:"automount_service_account_token,omitempty"`
+	K8sCreatedAt                 *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// RoleInfo contains relevant Role or ClusterRole information.
+type RoleInfo struct {
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace,omitempty"` // Empty for ClusterRole
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	IsCluster    bool              `json:"is_cluster"` // true for ClusterRole
+	RuleCount    int               `json:"rule_count"` // Number of rules
+	Resources    []string          `json:"resources"`  // Unique resource types covered
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// RoleBindingInfo contains relevant RoleBinding or ClusterRoleBinding information.
+type RoleBindingInfo struct {
+	UID          string            `json:"uid"`
+	Name         string            `json:"name"`
+	Namespace    string            `json:"namespace,omitempty"` // Empty for ClusterRoleBinding
+	Labels       map[string]string `json:"labels,omitempty"`
+	Annotations  map[string]string `json:"annotations,omitempty"`
+	IsCluster    bool              `json:"is_cluster"` // true for ClusterRoleBinding
+	RoleRef      RoleRef           `json:"role_ref"`
+	Subjects     []Subject         `json:"subjects,omitempty"`
+	K8sCreatedAt *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
+// RoleRef contains the role reference information.
+type RoleRef struct {
+	Kind string `json:"kind"` // Role or ClusterRole
+	Name string `json:"name"`
+}
+
+// Subject contains the subject (user, group, or service account) information.
+type Subject struct {
+	Kind      string `json:"kind"` // User, Group, or ServiceAccount
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"` // Only for ServiceAccount
 }
 
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
@@ -948,6 +1026,155 @@ func NewPVCInfo(pvc *corev1.PersistentVolumeClaim) PVCInfo {
 		Phase:            string(pvc.Status.Phase),
 		VolumeMode:       volumeMode,
 		K8sCreatedAt:     &createdAt,
+	}
+}
+
+// NewServiceAccountInfo creates ServiceAccountInfo from a Kubernetes ServiceAccount.
+func NewServiceAccountInfo(sa *corev1.ServiceAccount) ServiceAccountInfo {
+	createdAt := sa.CreationTimestamp.Time
+
+	// Extract secret names only
+	var secrets []string
+	for _, s := range sa.Secrets {
+		secrets = append(secrets, s.Name)
+	}
+
+	// Extract image pull secret names only
+	var imagePullSecrets []string
+	for _, s := range sa.ImagePullSecrets {
+		imagePullSecrets = append(imagePullSecrets, s.Name)
+	}
+
+	return ServiceAccountInfo{
+		UID:                          string(sa.UID),
+		Name:                         sa.Name,
+		Namespace:                    sa.Namespace,
+		Labels:                       sa.Labels,
+		Annotations:                  filterAnnotations(sa.Annotations),
+		Secrets:                      secrets,
+		ImagePullSecrets:             imagePullSecrets,
+		AutomountServiceAccountToken: sa.AutomountServiceAccountToken,
+		K8sCreatedAt:                 &createdAt,
+	}
+}
+
+// NewRoleInfo creates RoleInfo from a Kubernetes Role.
+func NewRoleInfo(role *rbacv1.Role) RoleInfo {
+	createdAt := role.CreationTimestamp.Time
+
+	// Extract unique resources from rules
+	resourceSet := make(map[string]struct{})
+	for _, rule := range role.Rules {
+		for _, resource := range rule.Resources {
+			resourceSet[resource] = struct{}{}
+		}
+	}
+
+	resources := make([]string, 0, len(resourceSet))
+	for r := range resourceSet {
+		resources = append(resources, r)
+	}
+
+	return RoleInfo{
+		UID:          string(role.UID),
+		Name:         role.Name,
+		Namespace:    role.Namespace,
+		Labels:       role.Labels,
+		Annotations:  filterAnnotations(role.Annotations),
+		IsCluster:    false,
+		RuleCount:    len(role.Rules),
+		Resources:    resources,
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewClusterRoleInfo creates RoleInfo from a Kubernetes ClusterRole.
+func NewClusterRoleInfo(clusterRole *rbacv1.ClusterRole) RoleInfo {
+	createdAt := clusterRole.CreationTimestamp.Time
+
+	// Extract unique resources from rules
+	resourceSet := make(map[string]struct{})
+	for _, rule := range clusterRole.Rules {
+		for _, resource := range rule.Resources {
+			resourceSet[resource] = struct{}{}
+		}
+	}
+
+	resources := make([]string, 0, len(resourceSet))
+	for r := range resourceSet {
+		resources = append(resources, r)
+	}
+
+	return RoleInfo{
+		UID:          string(clusterRole.UID),
+		Name:         clusterRole.Name,
+		Namespace:    "", // Empty for ClusterRole
+		Labels:       clusterRole.Labels,
+		Annotations:  filterAnnotations(clusterRole.Annotations),
+		IsCluster:    true,
+		RuleCount:    len(clusterRole.Rules),
+		Resources:    resources,
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewRoleBindingInfo creates RoleBindingInfo from a Kubernetes RoleBinding.
+func NewRoleBindingInfo(rb *rbacv1.RoleBinding) RoleBindingInfo {
+	createdAt := rb.CreationTimestamp.Time
+
+	// Extract subjects
+	subjects := make([]Subject, 0, len(rb.Subjects))
+	for _, s := range rb.Subjects {
+		subjects = append(subjects, Subject{
+			Kind:      s.Kind,
+			Name:      s.Name,
+			Namespace: s.Namespace,
+		})
+	}
+
+	return RoleBindingInfo{
+		UID:         string(rb.UID),
+		Name:        rb.Name,
+		Namespace:   rb.Namespace,
+		Labels:      rb.Labels,
+		Annotations: filterAnnotations(rb.Annotations),
+		IsCluster:   false,
+		RoleRef: RoleRef{
+			Kind: rb.RoleRef.Kind,
+			Name: rb.RoleRef.Name,
+		},
+		Subjects:     subjects,
+		K8sCreatedAt: &createdAt,
+	}
+}
+
+// NewClusterRoleBindingInfo creates RoleBindingInfo from a Kubernetes ClusterRoleBinding.
+func NewClusterRoleBindingInfo(crb *rbacv1.ClusterRoleBinding) RoleBindingInfo {
+	createdAt := crb.CreationTimestamp.Time
+
+	// Extract subjects
+	subjects := make([]Subject, 0, len(crb.Subjects))
+	for _, s := range crb.Subjects {
+		subjects = append(subjects, Subject{
+			Kind:      s.Kind,
+			Name:      s.Name,
+			Namespace: s.Namespace,
+		})
+	}
+
+	return RoleBindingInfo{
+		UID:         string(crb.UID),
+		Name:        crb.Name,
+		Namespace:   "", // Empty for ClusterRoleBinding
+		Labels:      crb.Labels,
+		Annotations: filterAnnotations(crb.Annotations),
+		IsCluster:   true,
+		RoleRef: RoleRef{
+			Kind: crb.RoleRef.Kind,
+			Name: crb.RoleRef.Name,
+		},
+		Subjects:     subjects,
+		K8sCreatedAt: &createdAt,
 	}
 }
 
