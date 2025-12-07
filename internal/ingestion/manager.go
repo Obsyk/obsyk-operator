@@ -59,6 +59,8 @@ type Manager struct {
 	deploymentIngester  *DeploymentIngester
 	statefulsetIngester *StatefulSetIngester
 	daemonsetIngester   *DaemonSetIngester
+	jobIngester         *JobIngester
+	cronjobIngester     *CronJobIngester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -128,6 +130,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.deploymentIngester = NewDeploymentIngester(m.informerFactory, ingesterCfg, m.log)
 	m.statefulsetIngester = NewStatefulSetIngester(m.informerFactory, ingesterCfg, m.log)
 	m.daemonsetIngester = NewDaemonSetIngester(m.informerFactory, ingesterCfg, m.log)
+	m.jobIngester = NewJobIngester(m.informerFactory, ingesterCfg, m.log)
+	m.cronjobIngester = NewCronJobIngester(m.informerFactory, ingesterCfg, m.log)
 
 	// Register event handlers before starting factory
 	m.podIngester.RegisterHandlers()
@@ -137,6 +141,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.deploymentIngester.RegisterHandlers()
 	m.statefulsetIngester.RegisterHandlers()
 	m.daemonsetIngester.RegisterHandlers()
+	m.jobIngester.RegisterHandlers()
+	m.cronjobIngester.RegisterHandlers()
 
 	// Start event processor goroutine
 	go m.processEvents(procCtx)
@@ -375,6 +381,20 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		return nil, fmt.Errorf("listing daemonsets: %w", err)
 	}
 
+	// Get jobs
+	jobLister := m.informerFactory.Batch().V1().Jobs().Lister()
+	jobs, err := jobLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing jobs: %w", err)
+	}
+
+	// Get cronjobs
+	cronjobLister := m.informerFactory.Batch().V1().CronJobs().Lister()
+	cronjobs, err := cronjobLister.List(labels.Everything())
+	if err != nil {
+		return nil, fmt.Errorf("listing cronjobs: %w", err)
+	}
+
 	// Convert to transport types
 	payload := &transport.SnapshotPayload{
 		ClusterUID:   m.config.ClusterUID,
@@ -385,6 +405,8 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 		Deployments:  make([]transport.DeploymentInfo, 0, len(deployments)),
 		StatefulSets: make([]transport.StatefulSetInfo, 0, len(statefulsets)),
 		DaemonSets:   make([]transport.DaemonSetInfo, 0, len(daemonsets)),
+		Jobs:         make([]transport.JobInfo, 0, len(jobs)),
+		CronJobs:     make([]transport.CronJobInfo, 0, len(cronjobs)),
 	}
 
 	for _, ns := range namespaces {
@@ -413,6 +435,14 @@ func (m *Manager) GetCurrentState() (*transport.SnapshotPayload, error) {
 
 	for _, ds := range daemonsets {
 		payload.DaemonSets = append(payload.DaemonSets, transport.NewDaemonSetInfo(ds))
+	}
+
+	for _, job := range jobs {
+		payload.Jobs = append(payload.Jobs, transport.NewJobInfo(job))
+	}
+
+	for _, cj := range cronjobs {
+		payload.CronJobs = append(payload.CronJobs, transport.NewCronJobInfo(cj))
 	}
 
 	return payload, nil
