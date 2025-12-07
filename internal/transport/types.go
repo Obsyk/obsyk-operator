@@ -26,6 +26,7 @@ const (
 	ResourceTypePod       ResourceType = "Pod"
 	ResourceTypeService   ResourceType = "Service"
 	ResourceTypeNamespace ResourceType = "Namespace"
+	ResourceTypeNode      ResourceType = "Node"
 )
 
 // SnapshotPayload represents a full cluster state snapshot.
@@ -56,6 +57,9 @@ type SnapshotPayload struct {
 
 	// Services in the cluster.
 	Services []ServiceInfo `json:"services"`
+
+	// Nodes in the cluster.
+	Nodes []NodeInfo `json:"nodes"`
 }
 
 // EventPayload represents a single resource change event.
@@ -96,6 +100,7 @@ type ResourceCounts struct {
 	Namespaces int32 `json:"namespaces"`
 	Pods       int32 `json:"pods"`
 	Services   int32 `json:"services"`
+	Nodes      int32 `json:"nodes"`
 }
 
 // NamespaceInfo contains relevant namespace information.
@@ -150,6 +155,24 @@ type PortInfo struct {
 	TargetPort string `json:"targetPort,omitempty"`
 }
 
+// NodeInfo contains relevant node information.
+type NodeInfo struct {
+	UID              string            `json:"uid"`
+	Name             string            `json:"name"`
+	Labels           map[string]string `json:"labels,omitempty"`
+	Annotations      map[string]string `json:"annotations,omitempty"`
+	Status           string            `json:"status"` // Ready, NotReady
+	Roles            []string          `json:"roles,omitempty"`
+	KubeletVersion   string            `json:"kubelet_version,omitempty"`
+	ContainerRuntime string            `json:"container_runtime,omitempty"`
+	OSImage          string            `json:"os_image,omitempty"`
+	Architecture     string            `json:"architecture,omitempty"`
+	CPUCapacity      string            `json:"cpu_capacity,omitempty"`
+	MemoryCapacity   string            `json:"memory_capacity,omitempty"`
+	PodCapacity      string            `json:"pod_capacity,omitempty"`
+	K8sCreatedAt     *time.Time        `json:"k8s_created_at,omitempty"`
+}
+
 // NewNamespaceInfo creates NamespaceInfo from a Kubernetes Namespace.
 func NewNamespaceInfo(ns *corev1.Namespace) NamespaceInfo {
 	createdAt := ns.CreationTimestamp.Time
@@ -185,6 +208,51 @@ func NewPodInfo(pod *corev1.Pod) PodInfo {
 		Containers:     containers,
 		Phase:          string(pod.Status.Phase),
 		K8sCreatedAt:   &createdAt,
+	}
+}
+
+// NewNodeInfo creates NodeInfo from a Kubernetes Node.
+func NewNodeInfo(node *corev1.Node) NodeInfo {
+	createdAt := node.CreationTimestamp.Time
+
+	// Determine node status from conditions
+	status := "NotReady"
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == corev1.NodeReady {
+			if condition.Status == corev1.ConditionTrue {
+				status = "Ready"
+			}
+			break
+		}
+	}
+
+	// Extract roles from labels
+	var roles []string
+	for label := range node.Labels {
+		if label == "node-role.kubernetes.io/control-plane" || label == "node-role.kubernetes.io/master" {
+			roles = append(roles, "control-plane")
+		} else if label == "node-role.kubernetes.io/worker" {
+			roles = append(roles, "worker")
+		} else if len(label) > 24 && label[:24] == "node-role.kubernetes.io/" {
+			roles = append(roles, label[24:])
+		}
+	}
+
+	return NodeInfo{
+		UID:              string(node.UID),
+		Name:             node.Name,
+		Labels:           node.Labels,
+		Annotations:      filterAnnotations(node.Annotations),
+		Status:           status,
+		Roles:            roles,
+		KubeletVersion:   node.Status.NodeInfo.KubeletVersion,
+		ContainerRuntime: node.Status.NodeInfo.ContainerRuntimeVersion,
+		OSImage:          node.Status.NodeInfo.OSImage,
+		Architecture:     node.Status.NodeInfo.Architecture,
+		CPUCapacity:      node.Status.Capacity.Cpu().String(),
+		MemoryCapacity:   node.Status.Capacity.Memory().String(),
+		PodCapacity:      node.Status.Capacity.Pods().String(),
+		K8sCreatedAt:     &createdAt,
 	}
 }
 
