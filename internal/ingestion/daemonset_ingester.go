@@ -117,7 +117,7 @@ func (d *DaemonSetIngester) sendEvent(eventType transport.EventType, ds *appsv1.
 	select {
 	case d.config.EventChan <- event:
 	default:
-		d.log.Error(nil, "event channel full, dropping event",
+		d.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", ds.Name,
 			"namespace", ds.Namespace)
@@ -138,7 +138,7 @@ func (d *DaemonSetIngester) sendDeleteEvent(ds *appsv1.DaemonSet) {
 	select {
 	case d.config.EventChan <- event:
 	default:
-		d.log.Error(nil, "event channel full, dropping delete event",
+		d.log.Info("event channel full, dropping delete event",
 			"name", ds.Name,
 			"namespace", ds.Namespace)
 	}

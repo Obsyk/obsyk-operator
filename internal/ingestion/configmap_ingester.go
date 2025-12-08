@@ -132,7 +132,7 @@ func (i *ConfigMapIngester) sendEvent(eventType transport.EventType, cm *corev1.
 	case i.config.EventChan <- event:
 		// Event sent successfully
 	default:
-		i.log.Info("event channel full, dropping ConfigMap event",
+		i.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", cm.Name,
 			"namespace", cm.Namespace)
@@ -154,7 +154,7 @@ func (i *ConfigMapIngester) sendDeleteEvent(cm *corev1.ConfigMap) {
 	case i.config.EventChan <- event:
 		// Event sent successfully
 	default:
-		i.log.Info("event channel full, dropping ConfigMap delete event",
+		i.log.Info("event channel full, dropping delete event",
 			"name", cm.Name,
 			"namespace", cm.Namespace)
 	}

@@ -118,7 +118,7 @@ func (i *PVCIngester) sendEvent(eventType transport.EventType, pvc *corev1.Persi
 	select {
 	case i.config.EventChan <- event:
 	default:
-		i.log.Info("event channel full, dropping PVC event",
+		i.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", pvc.Name,
 			"namespace", pvc.Namespace)
@@ -139,7 +139,7 @@ func (i *PVCIngester) sendDeleteEvent(pvc *corev1.PersistentVolumeClaim) {
 	select {
 	case i.config.EventChan <- event:
 	default:
-		i.log.Info("event channel full, dropping PVC delete event",
+		i.log.Info("event channel full, dropping delete event",
 			"name", pvc.Name,
 			"namespace", pvc.Namespace)
 	}

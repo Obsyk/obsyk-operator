@@ -117,7 +117,7 @@ func (s *ServiceAccountIngester) sendEvent(eventType transport.EventType, sa *co
 	select {
 	case s.config.EventChan <- event:
 	default:
-		s.log.Error(nil, "event channel full, dropping event",
+		s.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", sa.Name,
 			"namespace", sa.Namespace)
@@ -138,7 +138,7 @@ func (s *ServiceAccountIngester) sendDeleteEvent(sa *corev1.ServiceAccount) {
 	select {
 	case s.config.EventChan <- event:
 	default:
-		s.log.Error(nil, "event channel full, dropping delete event",
+		s.log.Info("event channel full, dropping delete event",
 			"name", sa.Name,
 			"namespace", sa.Namespace)
 	}

@@ -117,7 +117,7 @@ func (i *IngressIngester) sendEvent(eventType transport.EventType, ing *networki
 	select {
 	case i.config.EventChan <- event:
 	default:
-		i.log.Error(nil, "event channel full, dropping event",
+		i.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", ing.Name,
 			"namespace", ing.Namespace)
@@ -138,7 +138,7 @@ func (i *IngressIngester) sendDeleteEvent(ing *networkingv1.Ingress) {
 	select {
 	case i.config.EventChan <- event:
 	default:
-		i.log.Error(nil, "event channel full, dropping delete event",
+		i.log.Info("event channel full, dropping delete event",
 			"name", ing.Name,
 			"namespace", ing.Namespace)
 	}

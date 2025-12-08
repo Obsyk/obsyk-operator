@@ -117,7 +117,7 @@ func (r *RoleIngester) sendEvent(eventType transport.EventType, role *rbacv1.Rol
 	select {
 	case r.config.EventChan <- event:
 	default:
-		r.log.Error(nil, "event channel full, dropping event",
+		r.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", role.Name,
 			"namespace", role.Namespace)
@@ -138,7 +138,7 @@ func (r *RoleIngester) sendDeleteEvent(role *rbacv1.Role) {
 	select {
 	case r.config.EventChan <- event:
 	default:
-		r.log.Error(nil, "event channel full, dropping delete event",
+		r.log.Info("event channel full, dropping delete event",
 			"name", role.Name,
 			"namespace", role.Namespace)
 	}
