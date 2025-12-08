@@ -114,7 +114,7 @@ func (n *NodeIngester) sendEvent(eventType transport.EventType, node *corev1.Nod
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping event",
+		n.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", node.Name)
 	}
@@ -134,7 +134,7 @@ func (n *NodeIngester) sendDeleteEvent(node *corev1.Node) {
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping delete event",
+		n.log.Info("event channel full, dropping delete event",
 			"name", node.Name)
 	}
 }

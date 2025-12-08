@@ -139,7 +139,7 @@ func (i *SecretIngester) sendEvent(eventType transport.EventType, secret *corev1
 	case i.config.EventChan <- event:
 		// Event sent successfully
 	default:
-		i.log.Info("event channel full, dropping Secret event",
+		i.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", secret.Name,
 			"namespace", secret.Namespace)
@@ -161,7 +161,7 @@ func (i *SecretIngester) sendDeleteEvent(secret *corev1.Secret) {
 	case i.config.EventChan <- event:
 		// Event sent successfully
 	default:
-		i.log.Info("event channel full, dropping Secret delete event",
+		i.log.Info("event channel full, dropping delete event",
 			"name", secret.Name,
 			"namespace", secret.Namespace)
 	}

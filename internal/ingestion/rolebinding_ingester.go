@@ -117,7 +117,7 @@ func (r *RoleBindingIngester) sendEvent(eventType transport.EventType, rb *rbacv
 	select {
 	case r.config.EventChan <- event:
 	default:
-		r.log.Error(nil, "event channel full, dropping event",
+		r.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", rb.Name,
 			"namespace", rb.Namespace)
@@ -138,7 +138,7 @@ func (r *RoleBindingIngester) sendDeleteEvent(rb *rbacv1.RoleBinding) {
 	select {
 	case r.config.EventChan <- event:
 	default:
-		r.log.Error(nil, "event channel full, dropping delete event",
+		r.log.Info("event channel full, dropping delete event",
 			"name", rb.Name,
 			"namespace", rb.Namespace)
 	}

@@ -114,7 +114,7 @@ func (c *ClusterRoleIngester) sendEvent(eventType transport.EventType, clusterRo
 	select {
 	case c.config.EventChan <- event:
 	default:
-		c.log.Error(nil, "event channel full, dropping event",
+		c.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", clusterRole.Name)
 	}
@@ -134,7 +134,7 @@ func (c *ClusterRoleIngester) sendDeleteEvent(clusterRole *rbacv1.ClusterRole) {
 	select {
 	case c.config.EventChan <- event:
 	default:
-		c.log.Error(nil, "event channel full, dropping delete event",
+		c.log.Info("event channel full, dropping delete event",
 			"name", clusterRole.Name)
 	}
 }

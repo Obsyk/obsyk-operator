@@ -117,7 +117,7 @@ func (p *PodIngester) sendEvent(eventType transport.EventType, pod *corev1.Pod) 
 	select {
 	case p.config.EventChan <- event:
 	default:
-		p.log.Error(nil, "event channel full, dropping event",
+		p.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", pod.Name,
 			"namespace", pod.Namespace)
@@ -138,7 +138,7 @@ func (p *PodIngester) sendDeleteEvent(pod *corev1.Pod) {
 	select {
 	case p.config.EventChan <- event:
 	default:
-		p.log.Error(nil, "event channel full, dropping delete event",
+		p.log.Info("event channel full, dropping delete event",
 			"name", pod.Name,
 			"namespace", pod.Namespace)
 	}

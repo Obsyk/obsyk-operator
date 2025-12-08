@@ -117,7 +117,7 @@ func (j *JobIngester) sendEvent(eventType transport.EventType, job *batchv1.Job)
 	select {
 	case j.config.EventChan <- event:
 	default:
-		j.log.Error(nil, "event channel full, dropping event",
+		j.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", job.Name,
 			"namespace", job.Namespace)
@@ -138,7 +138,7 @@ func (j *JobIngester) sendDeleteEvent(job *batchv1.Job) {
 	select {
 	case j.config.EventChan <- event:
 	default:
-		j.log.Error(nil, "event channel full, dropping delete event",
+		j.log.Info("event channel full, dropping delete event",
 			"name", job.Name,
 			"namespace", job.Namespace)
 	}
