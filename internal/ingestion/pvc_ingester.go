@@ -29,7 +29,8 @@ func NewPVCIngester(factory informers.SharedInformerFactory, cfg IngesterConfig,
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (i *PVCIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (i *PVCIngester) RegisterHandlers() error {
 	informer := i.informerFactory.Core().V1().PersistentVolumeClaims().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (i *PVCIngester) RegisterHandlers() {
 		UpdateFunc: i.onUpdate,
 		DeleteFunc: i.onDelete,
 	})
-	if err != nil {
-		i.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles PVC addition events.

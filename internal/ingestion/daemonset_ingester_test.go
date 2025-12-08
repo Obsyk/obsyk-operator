@@ -24,7 +24,7 @@ func TestDaemonSetIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDaemonSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -150,7 +150,7 @@ func TestDaemonSetIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDaemonSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -223,7 +223,7 @@ func TestDaemonSetIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDaemonSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -273,7 +273,7 @@ func TestDaemonSetIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDaemonSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -352,7 +352,7 @@ func TestDaemonSetIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDaemonSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})

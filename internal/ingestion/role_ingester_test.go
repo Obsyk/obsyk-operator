@@ -23,7 +23,7 @@ func TestRoleIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewRoleIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -115,7 +115,7 @@ func TestRoleIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewRoleIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -171,7 +171,7 @@ func TestRoleIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewRoleIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -214,7 +214,7 @@ func TestRoleIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewRoleIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -259,7 +259,7 @@ func TestRoleIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewRoleIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

@@ -22,7 +22,7 @@ func TestConfigMapIngester_OnAdd(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	immutable := true
 	cm := &corev1.ConfigMap{
@@ -89,7 +89,7 @@ func TestConfigMapIngester_OnUpdate(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	oldCM := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +147,7 @@ func TestConfigMapIngester_OnDelete(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -187,7 +187,7 @@ func TestConfigMapIngester_ChannelFull(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -220,7 +220,7 @@ func TestConfigMapIngester_SkipSameResourceVersion(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -254,7 +254,7 @@ func TestConfigMapIngester_SecurityNoDataValues(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewConfigMapIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	sensitiveValue := "THIS-SENSITIVE-VALUE-MUST-NOT-BE-TRANSMITTED"
 	cm := &corev1.ConfigMap{
