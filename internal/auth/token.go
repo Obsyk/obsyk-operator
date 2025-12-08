@@ -4,9 +4,11 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -15,8 +17,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"encoding/json"
 
 	"github.com/go-logr/logr"
 	"github.com/golang-jwt/jwt/v5"
@@ -44,6 +44,9 @@ type Credentials struct {
 
 	// PrivateKey is the ECDSA P-256 private key for signing assertions
 	PrivateKey *ecdsa.PrivateKey
+
+	// PrivateKeyPEM is the raw PEM-encoded private key (used for comparison)
+	PrivateKeyPEM []byte
 }
 
 // ParseCredentials parses credentials from a Secret's data
@@ -69,8 +72,9 @@ func ParseCredentials(data map[string][]byte) (*Credentials, error) {
 	}
 
 	return &Credentials{
-		ClientID:   clientID,
-		PrivateKey: privateKey,
+		ClientID:      clientID,
+		PrivateKey:    privateKey,
+		PrivateKeyPEM: privateKeyBytes,
 	}, nil
 }
 
@@ -130,12 +134,21 @@ func NewTokenManager(platformURL string, credentials *Credentials, httpClient *h
 	}
 }
 
-// UpdateCredentials updates the credentials used for authentication
+// UpdateCredentials updates the credentials used for authentication.
+// Only invalidates the cached token if credentials have actually changed.
 func (tm *TokenManager) UpdateCredentials(credentials *Credentials) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
+
+	// Skip if credentials haven't changed
+	if tm.credentials != nil &&
+		tm.credentials.ClientID == credentials.ClientID &&
+		bytes.Equal(tm.credentials.PrivateKeyPEM, credentials.PrivateKeyPEM) {
+		return
+	}
+
 	tm.credentials = credentials
-	// Invalidate current token to force refresh
+	// Invalidate current token to force refresh with new credentials
 	tm.accessToken = ""
 	tm.expiresAt = time.Time{}
 }
