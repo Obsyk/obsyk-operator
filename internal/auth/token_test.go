@@ -336,3 +336,50 @@ func TestTokenManager_UpdateCredentials(t *testing.T) {
 		t.Error("Expected different token after credentials update")
 	}
 }
+
+func TestTokenManager_UpdateCredentials_NoThrashing(t *testing.T) {
+	_, privatePEM := generateTestKeyPair(t)
+
+	tokenIndex := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenIndex++
+		resp := TokenResponse{
+			AccessToken: "token-" + string(rune('0'+tokenIndex)),
+			TokenType:   "Bearer",
+			ExpiresIn:   3600,
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	creds, _ := ParseCredentials(map[string][]byte{
+		"client_id":   []byte("test-client-id"),
+		"private_key": []byte(privatePEM),
+	})
+
+	tm := NewTokenManager(server.URL, creds, server.Client(), logr.Discard())
+
+	// Get initial token
+	token1, _ := tm.GetAccessToken(context.Background())
+	if tokenIndex != 1 {
+		t.Fatalf("Expected 1 token request, got %d", tokenIndex)
+	}
+
+	// Update with same credentials (should NOT invalidate token)
+	sameCreds, _ := ParseCredentials(map[string][]byte{
+		"client_id":   []byte("test-client-id"),
+		"private_key": []byte(privatePEM),
+	})
+	tm.UpdateCredentials(sameCreds)
+
+	// Get token again - should return cached token, not refresh
+	token2, _ := tm.GetAccessToken(context.Background())
+
+	if token1 != token2 {
+		t.Error("Expected same token when credentials unchanged")
+	}
+
+	if tokenIndex != 1 {
+		t.Errorf("Expected no additional token requests, but got %d total", tokenIndex)
+	}
+}
