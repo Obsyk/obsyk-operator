@@ -95,7 +95,7 @@ jobs:
 
       # SLSA Provenance Attestation
       - name: Generate SLSA provenance attestation
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v3
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.digest.outputs.digest }}
