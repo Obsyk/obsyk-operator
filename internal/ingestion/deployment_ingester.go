@@ -117,7 +117,7 @@ func (d *DeploymentIngester) sendEvent(eventType transport.EventType, deploy *ap
 	select {
 	case d.config.EventChan <- event:
 	default:
-		d.log.Error(nil, "event channel full, dropping event",
+		d.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", deploy.Name,
 			"namespace", deploy.Namespace)
@@ -138,7 +138,7 @@ func (d *DeploymentIngester) sendDeleteEvent(deploy *appsv1.Deployment) {
 	select {
 	case d.config.EventChan <- event:
 	default:
-		d.log.Error(nil, "event channel full, dropping delete event",
+		d.log.Info("event channel full, dropping delete event",
 			"name", deploy.Name,
 			"namespace", deploy.Namespace)
 	}

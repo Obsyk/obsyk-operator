@@ -117,7 +117,7 @@ func (n *NetworkPolicyIngester) sendEvent(eventType transport.EventType, np *net
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping event",
+		n.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", np.Name,
 			"namespace", np.Namespace)
@@ -138,7 +138,7 @@ func (n *NetworkPolicyIngester) sendDeleteEvent(np *networkingv1.NetworkPolicy) 
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping delete event",
+		n.log.Info("event channel full, dropping delete event",
 			"name", np.Name,
 			"namespace", np.Namespace)
 	}

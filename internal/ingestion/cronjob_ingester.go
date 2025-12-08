@@ -117,7 +117,7 @@ func (c *CronJobIngester) sendEvent(eventType transport.EventType, cj *batchv1.C
 	select {
 	case c.config.EventChan <- event:
 	default:
-		c.log.Error(nil, "event channel full, dropping event",
+		c.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", cj.Name,
 			"namespace", cj.Namespace)
@@ -138,7 +138,7 @@ func (c *CronJobIngester) sendDeleteEvent(cj *batchv1.CronJob) {
 	select {
 	case c.config.EventChan <- event:
 	default:
-		c.log.Error(nil, "event channel full, dropping delete event",
+		c.log.Info("event channel full, dropping delete event",
 			"name", cj.Name,
 			"namespace", cj.Namespace)
 	}

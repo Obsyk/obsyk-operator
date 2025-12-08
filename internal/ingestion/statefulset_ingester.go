@@ -117,7 +117,7 @@ func (s *StatefulSetIngester) sendEvent(eventType transport.EventType, sts *apps
 	select {
 	case s.config.EventChan <- event:
 	default:
-		s.log.Error(nil, "event channel full, dropping event",
+		s.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", sts.Name,
 			"namespace", sts.Namespace)
@@ -138,7 +138,7 @@ func (s *StatefulSetIngester) sendDeleteEvent(sts *appsv1.StatefulSet) {
 	select {
 	case s.config.EventChan <- event:
 	default:
-		s.log.Error(nil, "event channel full, dropping delete event",
+		s.log.Info("event channel full, dropping delete event",
 			"name", sts.Name,
 			"namespace", sts.Namespace)
 	}

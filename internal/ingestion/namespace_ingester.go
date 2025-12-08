@@ -113,7 +113,7 @@ func (n *NamespaceIngester) sendEvent(eventType transport.EventType, ns *corev1.
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping event",
+		n.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", ns.Name)
 	}
@@ -133,7 +133,7 @@ func (n *NamespaceIngester) sendDeleteEvent(ns *corev1.Namespace) {
 	select {
 	case n.config.EventChan <- event:
 	default:
-		n.log.Error(nil, "event channel full, dropping delete event",
+		n.log.Info("event channel full, dropping delete event",
 			"name", ns.Name)
 	}
 }
