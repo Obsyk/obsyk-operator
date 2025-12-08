@@ -23,7 +23,7 @@ func TestClusterRoleBindingIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewClusterRoleBindingIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -125,7 +125,7 @@ func TestClusterRoleBindingIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewClusterRoleBindingIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -183,7 +183,7 @@ func TestClusterRoleBindingIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewClusterRoleBindingIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -226,7 +226,7 @@ func TestClusterRoleBindingIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewClusterRoleBindingIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -277,7 +277,7 @@ func TestClusterRoleBindingIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewClusterRoleBindingIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

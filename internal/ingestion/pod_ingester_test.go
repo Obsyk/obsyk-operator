@@ -23,7 +23,7 @@ func TestPodIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewPodIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -93,7 +93,7 @@ func TestPodIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewPodIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -151,7 +151,7 @@ func TestPodIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewPodIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -201,7 +201,7 @@ func TestPodIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewPodIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -250,7 +250,7 @@ func TestPodIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewPodIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})

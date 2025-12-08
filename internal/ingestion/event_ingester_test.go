@@ -23,7 +23,7 @@ func TestEventIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -128,7 +128,7 @@ func TestEventIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -191,7 +191,7 @@ func TestEventIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -234,7 +234,7 @@ func TestEventIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -283,7 +283,7 @@ func TestEventIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)
@@ -315,7 +315,7 @@ func TestEventIngester_WarningEvent(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewEventIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

@@ -29,7 +29,8 @@ func NewDeploymentIngester(factory informers.SharedInformerFactory, cfg Ingester
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (d *DeploymentIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (d *DeploymentIngester) RegisterHandlers() error {
 	informer := d.informerFactory.Apps().V1().Deployments().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (d *DeploymentIngester) RegisterHandlers() {
 		UpdateFunc: d.onUpdate,
 		DeleteFunc: d.onDelete,
 	})
-	if err != nil {
-		d.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Deployment addition events.

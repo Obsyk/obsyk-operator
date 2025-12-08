@@ -24,7 +24,7 @@ func TestStatefulSetIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewStatefulSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -150,7 +150,7 @@ func TestStatefulSetIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewStatefulSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -227,7 +227,7 @@ func TestStatefulSetIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewStatefulSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -277,7 +277,7 @@ func TestStatefulSetIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewStatefulSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -362,7 +362,7 @@ func TestStatefulSetIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewStatefulSetIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})

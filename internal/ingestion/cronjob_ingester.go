@@ -29,7 +29,8 @@ func NewCronJobIngester(factory informers.SharedInformerFactory, cfg IngesterCon
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (c *CronJobIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (c *CronJobIngester) RegisterHandlers() error {
 	informer := c.informerFactory.Batch().V1().CronJobs().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (c *CronJobIngester) RegisterHandlers() {
 		UpdateFunc: c.onUpdate,
 		DeleteFunc: c.onDelete,
 	})
-	if err != nil {
-		c.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles CronJob addition events.

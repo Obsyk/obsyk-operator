@@ -24,7 +24,7 @@ func TestDeploymentIngester_OnAdd(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDeploymentIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -146,7 +146,7 @@ func TestDeploymentIngester_OnUpdate(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDeploymentIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -222,7 +222,7 @@ func TestDeploymentIngester_OnDelete(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDeploymentIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -272,7 +272,7 @@ func TestDeploymentIngester_ChannelFull(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDeploymentIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})
@@ -355,7 +355,7 @@ func TestDeploymentIngester_SkipSameResourceVersion(t *testing.T) {
 	log := ctrl.Log.WithName("test")
 
 	ingester := NewDeploymentIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Start informer
 	stopCh := make(chan struct{})

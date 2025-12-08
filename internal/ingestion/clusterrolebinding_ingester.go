@@ -29,7 +29,8 @@ func NewClusterRoleBindingIngester(factory informers.SharedInformerFactory, cfg 
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (c *ClusterRoleBindingIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (c *ClusterRoleBindingIngester) RegisterHandlers() error {
 	informer := c.informerFactory.Rbac().V1().ClusterRoleBindings().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (c *ClusterRoleBindingIngester) RegisterHandlers() {
 		UpdateFunc: c.onUpdate,
 		DeleteFunc: c.onDelete,
 	})
-	if err != nil {
-		c.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles ClusterRoleBinding addition events.

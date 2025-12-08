@@ -29,7 +29,8 @@ func NewJobIngester(factory informers.SharedInformerFactory, cfg IngesterConfig,
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (j *JobIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (j *JobIngester) RegisterHandlers() error {
 	informer := j.informerFactory.Batch().V1().Jobs().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (j *JobIngester) RegisterHandlers() {
 		UpdateFunc: j.onUpdate,
 		DeleteFunc: j.onDelete,
 	})
-	if err != nil {
-		j.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Job addition events.
