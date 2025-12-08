@@ -119,7 +119,7 @@ func (e *EventIngester) sendEvent(eventType transport.EventType, event *corev1.E
 	select {
 	case e.config.EventChan <- resourceEvent:
 	default:
-		e.log.Error(nil, "event channel full, dropping event",
+		e.log.Info("event channel full, dropping event",
 			"type", eventType,
 			"name", event.Name,
 			"namespace", event.Namespace)
@@ -140,7 +140,7 @@ func (e *EventIngester) sendDeleteEvent(event *corev1.Event) {
 	select {
 	case e.config.EventChan <- resourceEvent:
 	default:
-		e.log.Error(nil, "event channel full, dropping delete event",
+		e.log.Info("event channel full, dropping delete event",
 			"name", event.Name,
 			"namespace", event.Namespace)
 	}
