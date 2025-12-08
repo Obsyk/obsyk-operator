@@ -29,7 +29,8 @@ func NewNetworkPolicyIngester(factory informers.SharedInformerFactory, cfg Inges
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (n *NetworkPolicyIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (n *NetworkPolicyIngester) RegisterHandlers() error {
 	informer := n.informerFactory.Networking().V1().NetworkPolicies().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (n *NetworkPolicyIngester) RegisterHandlers() {
 		UpdateFunc: n.onUpdate,
 		DeleteFunc: n.onDelete,
 	})
-	if err != nil {
-		n.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles NetworkPolicy addition events.

@@ -35,13 +35,15 @@ func NewConfigMapIngester(factory informers.SharedInformerFactory, cfg IngesterC
 }
 
 // RegisterHandlers registers the event handlers with the informer.
-func (i *ConfigMapIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (i *ConfigMapIngester) RegisterHandlers() error {
 	informer := i.informerFactory.Core().V1().ConfigMaps().Informer()
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    i.onAdd,
 		UpdateFunc: i.onUpdate,
 		DeleteFunc: i.onDelete,
 	})
+	return err
 }
 
 // onAdd handles ConfigMap add events.

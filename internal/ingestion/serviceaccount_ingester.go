@@ -29,7 +29,8 @@ func NewServiceAccountIngester(factory informers.SharedInformerFactory, cfg Inge
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (s *ServiceAccountIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (s *ServiceAccountIngester) RegisterHandlers() error {
 	informer := s.informerFactory.Core().V1().ServiceAccounts().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (s *ServiceAccountIngester) RegisterHandlers() {
 		UpdateFunc: s.onUpdate,
 		DeleteFunc: s.onDelete,
 	})
-	if err != nil {
-		s.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles ServiceAccount addition events.

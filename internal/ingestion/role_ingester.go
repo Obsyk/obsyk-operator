@@ -29,7 +29,8 @@ func NewRoleIngester(factory informers.SharedInformerFactory, cfg IngesterConfig
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (r *RoleIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (r *RoleIngester) RegisterHandlers() error {
 	informer := r.informerFactory.Rbac().V1().Roles().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (r *RoleIngester) RegisterHandlers() {
 		UpdateFunc: r.onUpdate,
 		DeleteFunc: r.onDelete,
 	})
-	if err != nil {
-		r.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Role addition events.
