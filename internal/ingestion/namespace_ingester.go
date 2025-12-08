@@ -29,7 +29,8 @@ func NewNamespaceIngester(factory informers.SharedInformerFactory, cfg IngesterC
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (n *NamespaceIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (n *NamespaceIngester) RegisterHandlers() error {
 	informer := n.informerFactory.Core().V1().Namespaces().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (n *NamespaceIngester) RegisterHandlers() {
 		UpdateFunc: n.onUpdate,
 		DeleteFunc: n.onDelete,
 	})
-	if err != nil {
-		n.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Namespace addition events.

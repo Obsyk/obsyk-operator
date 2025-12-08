@@ -29,7 +29,8 @@ func NewIngressIngester(factory informers.SharedInformerFactory, cfg IngesterCon
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (i *IngressIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (i *IngressIngester) RegisterHandlers() error {
 	informer := i.informerFactory.Networking().V1().Ingresses().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (i *IngressIngester) RegisterHandlers() {
 		UpdateFunc: i.onUpdate,
 		DeleteFunc: i.onDelete,
 	})
-	if err != nil {
-		i.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Ingress addition events.

@@ -37,13 +37,15 @@ func NewSecretIngester(factory informers.SharedInformerFactory, cfg IngesterConf
 }
 
 // RegisterHandlers registers the event handlers with the informer.
-func (i *SecretIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (i *SecretIngester) RegisterHandlers() error {
 	informer := i.informerFactory.Core().V1().Secrets().Informer()
-	_, _ = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    i.onAdd,
 		UpdateFunc: i.onUpdate,
 		DeleteFunc: i.onDelete,
 	})
+	return err
 }
 
 // onAdd handles Secret add events.

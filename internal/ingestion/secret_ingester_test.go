@@ -23,7 +23,7 @@ func TestSecretIngester_OnAdd(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	immutable := true
 	secret := &corev1.Secret{
@@ -88,7 +88,7 @@ func TestSecretIngester_OnUpdate(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	oldSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -148,7 +148,7 @@ func TestSecretIngester_OnDelete(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -188,7 +188,7 @@ func TestSecretIngester_ChannelFull(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -221,7 +221,7 @@ func TestSecretIngester_SkipSameResourceVersion(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -256,7 +256,7 @@ func TestSecretIngester_SecurityNoDataValues(t *testing.T) {
 	log := testr.New(t)
 
 	ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-	ingester.RegisterHandlers()
+	_ = ingester.RegisterHandlers()
 
 	// Create a secret with highly sensitive data
 	sensitivePassword := "SUPER-SECRET-DATABASE-PASSWORD-12345"
@@ -366,7 +366,7 @@ func TestSecretIngester_SecretTypes(t *testing.T) {
 			log := testr.New(t)
 
 			ingester := NewSecretIngester(factory, IngesterConfig{EventChan: eventChan}, log)
-			ingester.RegisterHandlers()
+			_ = ingester.RegisterHandlers()
 
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{

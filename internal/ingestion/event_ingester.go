@@ -29,7 +29,8 @@ func NewEventIngester(factory informers.SharedInformerFactory, cfg IngesterConfi
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (e *EventIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (e *EventIngester) RegisterHandlers() error {
 	informer := e.informerFactory.Core().V1().Events().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (e *EventIngester) RegisterHandlers() {
 		UpdateFunc: e.onUpdate,
 		DeleteFunc: e.onDelete,
 	})
-	if err != nil {
-		e.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Event addition events.

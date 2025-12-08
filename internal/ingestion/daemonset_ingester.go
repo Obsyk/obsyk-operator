@@ -29,7 +29,8 @@ func NewDaemonSetIngester(factory informers.SharedInformerFactory, cfg IngesterC
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (d *DaemonSetIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (d *DaemonSetIngester) RegisterHandlers() error {
 	informer := d.informerFactory.Apps().V1().DaemonSets().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (d *DaemonSetIngester) RegisterHandlers() {
 		UpdateFunc: d.onUpdate,
 		DeleteFunc: d.onDelete,
 	})
-	if err != nil {
-		d.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles DaemonSet addition events.

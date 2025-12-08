@@ -29,7 +29,8 @@ func NewPodIngester(factory informers.SharedInformerFactory, cfg IngesterConfig,
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (p *PodIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (p *PodIngester) RegisterHandlers() error {
 	informer := p.informerFactory.Core().V1().Pods().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (p *PodIngester) RegisterHandlers() {
 		UpdateFunc: p.onUpdate,
 		DeleteFunc: p.onDelete,
 	})
-	if err != nil {
-		p.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles Pod addition events.

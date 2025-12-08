@@ -29,7 +29,8 @@ func NewStatefulSetIngester(factory informers.SharedInformerFactory, cfg Ingeste
 
 // RegisterHandlers registers the event handlers with the informer.
 // This must be called before starting the informer factory.
-func (s *StatefulSetIngester) RegisterHandlers() {
+// Returns an error if handler registration fails.
+func (s *StatefulSetIngester) RegisterHandlers() error {
 	informer := s.informerFactory.Apps().V1().StatefulSets().Informer()
 
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -37,9 +38,7 @@ func (s *StatefulSetIngester) RegisterHandlers() {
 		UpdateFunc: s.onUpdate,
 		DeleteFunc: s.onDelete,
 	})
-	if err != nil {
-		s.log.Error(err, "failed to add event handler")
-	}
+	return err
 }
 
 // onAdd handles StatefulSet addition events.
