@@ -51,27 +51,8 @@ type Manager struct {
 	// Rate limiter for sending events to the platform
 	limiter *rate.Limiter
 
-	// Individual ingesters
-	podIngester                *PodIngester
-	serviceIngester            *ServiceIngester
-	namespaceIngester          *NamespaceIngester
-	nodeIngester               *NodeIngester
-	deploymentIngester         *DeploymentIngester
-	statefulsetIngester        *StatefulSetIngester
-	daemonsetIngester          *DaemonSetIngester
-	jobIngester                *JobIngester
-	cronjobIngester            *CronJobIngester
-	ingressIngester            *IngressIngester
-	networkpolicyIngester      *NetworkPolicyIngester
-	configmapIngester          *ConfigMapIngester
-	secretIngester             *SecretIngester
-	pvcIngester                *PVCIngester
-	serviceaccountIngester     *ServiceAccountIngester
-	roleIngester               *RoleIngester
-	clusterroleIngester        *ClusterRoleIngester
-	rolebindingIngester        *RoleBindingIngester
-	clusterrolebindingIngester *ClusterRoleBindingIngester
-	eventIngester              *EventIngester
+	// All resource ingesters managed by this manager
+	ingesters []Ingester
 
 	// Lifecycle management
 	mu       sync.RWMutex
@@ -132,109 +113,16 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Must be set while holding the lock for thread-safety with GetCurrentState
 	m.informerFactory = informers.NewSharedInformerFactory(m.clientset, DefaultResyncPeriod)
 
-	// Create ingesters with event channel
+	// Create all ingesters using the generic factory function
 	ingesterCfg := IngesterConfig{EventChan: m.eventChan}
-	m.podIngester = NewPodIngester(m.informerFactory, ingesterCfg, m.log)
-	m.serviceIngester = NewServiceIngester(m.informerFactory, ingesterCfg, m.log)
-	m.namespaceIngester = NewNamespaceIngester(m.informerFactory, ingesterCfg, m.log)
-	m.nodeIngester = NewNodeIngester(m.informerFactory, ingesterCfg, m.log)
-	m.deploymentIngester = NewDeploymentIngester(m.informerFactory, ingesterCfg, m.log)
-	m.statefulsetIngester = NewStatefulSetIngester(m.informerFactory, ingesterCfg, m.log)
-	m.daemonsetIngester = NewDaemonSetIngester(m.informerFactory, ingesterCfg, m.log)
-	m.jobIngester = NewJobIngester(m.informerFactory, ingesterCfg, m.log)
-	m.cronjobIngester = NewCronJobIngester(m.informerFactory, ingesterCfg, m.log)
-	m.ingressIngester = NewIngressIngester(m.informerFactory, ingesterCfg, m.log)
-	m.networkpolicyIngester = NewNetworkPolicyIngester(m.informerFactory, ingesterCfg, m.log)
-	m.configmapIngester = NewConfigMapIngester(m.informerFactory, ingesterCfg, m.log)
-	m.secretIngester = NewSecretIngester(m.informerFactory, ingesterCfg, m.log)
-	m.pvcIngester = NewPVCIngester(m.informerFactory, ingesterCfg, m.log)
-	m.serviceaccountIngester = NewServiceAccountIngester(m.informerFactory, ingesterCfg, m.log)
-	m.roleIngester = NewRoleIngester(m.informerFactory, ingesterCfg, m.log)
-	m.clusterroleIngester = NewClusterRoleIngester(m.informerFactory, ingesterCfg, m.log)
-	m.rolebindingIngester = NewRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
-	m.clusterrolebindingIngester = NewClusterRoleBindingIngester(m.informerFactory, ingesterCfg, m.log)
-	m.eventIngester = NewEventIngester(m.informerFactory, ingesterCfg, m.log)
+	m.ingesters = IngestersFromFactory(m.informerFactory, ingesterCfg, m.log)
 
-	// Register event handlers before starting factory
-	if err := m.podIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering pod handler: %w", err)
-	}
-	if err := m.serviceIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering service handler: %w", err)
-	}
-	if err := m.namespaceIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering namespace handler: %w", err)
-	}
-	if err := m.nodeIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering node handler: %w", err)
-	}
-	if err := m.deploymentIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering deployment handler: %w", err)
-	}
-	if err := m.statefulsetIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering statefulset handler: %w", err)
-	}
-	if err := m.daemonsetIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering daemonset handler: %w", err)
-	}
-	if err := m.jobIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering job handler: %w", err)
-	}
-	if err := m.cronjobIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering cronjob handler: %w", err)
-	}
-	if err := m.ingressIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering ingress handler: %w", err)
-	}
-	if err := m.networkpolicyIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering networkpolicy handler: %w", err)
-	}
-	if err := m.configmapIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering configmap handler: %w", err)
-	}
-	if err := m.secretIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering secret handler: %w", err)
-	}
-	if err := m.pvcIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering pvc handler: %w", err)
-	}
-	if err := m.serviceaccountIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering serviceaccount handler: %w", err)
-	}
-	if err := m.roleIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering role handler: %w", err)
-	}
-	if err := m.clusterroleIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering clusterrole handler: %w", err)
-	}
-	if err := m.rolebindingIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering rolebinding handler: %w", err)
-	}
-	if err := m.clusterrolebindingIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering clusterrolebinding handler: %w", err)
-	}
-	if err := m.eventIngester.RegisterHandlers(); err != nil {
-		m.mu.Unlock()
-		return fmt.Errorf("registering event handler: %w", err)
+	// Register event handlers for all ingesters before starting factory
+	for i, ingester := range m.ingesters {
+		if err := ingester.RegisterHandlers(); err != nil {
+			m.mu.Unlock()
+			return fmt.Errorf("registering handler for ingester %d: %w", i, err)
+		}
 	}
 
 	// Start event processor goroutine
