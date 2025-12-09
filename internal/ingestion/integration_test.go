@@ -419,7 +419,11 @@ func TestIntegration_GracefulShutdownWithPendingEvents(t *testing.T) {
 		_, _ = clientset.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 	}
 
-	// Stop manager immediately - should drain remaining events
+	// Give informer time to queue events before stopping
+	// This prevents flaky failures in CI where events aren't queued yet
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop manager - should drain remaining events
 	mgr.Stop()
 
 	select {
