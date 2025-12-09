@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Ingresses, NetworkPolicies, ConfigMaps, Secrets) to the Obsyk SaaS platform using event-driven delta streaming.
+Kubernetes operator that deploys a "Deploy & Forget" observability agent in customer clusters. The agent streams cluster metadata (Namespaces, Pods, Services, Nodes, Deployments, StatefulSets, DaemonSets, Jobs, CronJobs, Ingresses, NetworkPolicies, ConfigMaps, Secrets, PersistentVolumeClaims, ServiceAccounts, Roles, ClusterRoles, RoleBindings, ClusterRoleBindings, Events) to the Obsyk SaaS platform using event-driven delta streaming.
 
 **Security Note**: ConfigMap and Secret ingestion collects only metadata and data keys - never values. This is critical for security.
 
@@ -40,19 +40,8 @@ Kubernetes operator that deploys a "Deploy & Forget" observability agent in cust
   /ingestion/
     types.go                  # Event types, interfaces (ResourceEvent, EventSender)
     manager.go                # IngestionManager - coordinates informers (thread-safe)
-    pod_ingester.go           # Pod SharedInformer event handler
-    service_ingester.go       # Service SharedInformer event handler
-    namespace_ingester.go     # Namespace SharedInformer event handler
-    node_ingester.go          # Node SharedInformer event handler
-    deployment_ingester.go    # Deployment SharedInformer event handler
-    statefulset_ingester.go   # StatefulSet SharedInformer event handler
-    daemonset_ingester.go     # DaemonSet SharedInformer event handler
-    ingress_ingester.go       # Ingress SharedInformer event handler
-    networkpolicy_ingester.go # NetworkPolicy SharedInformer event handler
-    job_ingester.go           # Job SharedInformer event handler
-    cronjob_ingester.go       # CronJob SharedInformer event handler
-    configmap_ingester.go     # ConfigMap SharedInformer event handler (metadata only)
-    secret_ingester.go        # Secret SharedInformer event handler (metadata only, NEVER values)
+    generic_ingester.go       # Generic ingester for all 20 resource types
+    resource_configs.go       # Resource-specific configurations (converters, type info)
     *_test.go                 # Unit tests for each component
     integration_test.go       # Integration tests with envtest
   /transport/
@@ -174,10 +163,13 @@ status:
       status: "True"
   lastSyncTime: "2024-01-15T10:30:00Z"
   lastSnapshotTime: "2024-01-15T10:25:00Z"
-  resourceCounts:
+  resourceCounts:                          # All 20 resource types tracked
     namespaces: 10
     pods: 100
     services: 20
+    nodes: 5
+    deployments: 15
+    # ... (and 15 more resource types)
 ```
 
 **Required Secret Format:**
@@ -214,13 +206,15 @@ Event-driven resource watching using SharedInformerFactory:
 
 **IngestionManager** (`manager.go`):
 - Creates and manages SharedInformerFactory
-- Coordinates Pod, Service, Namespace ingesters
+- Coordinates all 20 resource ingesters via generic implementation
 - Event channel with configurable buffer (default: 1000)
 - Rate limiting for event sending (token bucket algorithm, default: 10/sec, burst: 20)
 - Graceful shutdown with event draining
 
-**Ingesters** (pod/service/namespace/node/deployment/statefulset/daemonset/ingress/networkpolicy_ingester.go):
-- Implement `cache.ResourceEventHandler` interface
+**Generic Ingester** (`generic_ingester.go`, `resource_configs.go`):
+- Single generic implementation handles all 20 resource types
+- Resource-specific converters defined in `resource_configs.go`
+- Implements `cache.ResourceEventHandler` interface
 - Non-blocking event sends (drop with warning if channel full)
 - Skip updates with same ResourceVersion (deduplication)
 
@@ -254,10 +248,10 @@ HTTP client for platform communication:
 - Methods: `SendSnapshot()`, `SendEvent()`, `SendHeartbeat()`
 
 **Types** (`types.go`):
-- `SnapshotPayload` - Full cluster state
-- `EventPayload` - Single resource change (ADDED/UPDATED/DELETED)
+- `SnapshotPayload` - Full cluster state (20 resource types)
+- `EventPayload` - Single resource change (added/modified/deleted)
 - `HeartbeatPayload` - Periodic health check
-- Helper functions: `NewPodInfo()`, `NewServiceInfo()`, `NewNamespaceInfo()`
+- Helper functions: `New*Info()` for all 20 resource types (e.g., `NewPodInfo()`, `NewServiceInfo()`, `NewRoleInfo()`, etc.)
 
 #### 5. Auth Package (`internal/auth/`)
 
@@ -282,11 +276,12 @@ All major components are thread-safe:
 
 ### Security Requirements
 
-- **RBAC**: Read-only access only (list, watch) for Pods, Services, Namespaces
+- **RBAC**: Read-only access only (list, watch) for all 20 monitored resource types
 - **Credentials**: OAuth2 credentials read from Secret at runtime, never from CR
 - **Private Key**: NEVER logged or exposed, stored only in Kubernetes Secret
 - **Token Management**: Access tokens cached in memory, refreshed before expiry
 - **Error Handling**: Exponential backoff for 5xx errors from platform
+- **Sensitive Data**: ConfigMaps and Secrets only collect metadata and key names - NEVER values
 
 ## Build Commands
 
@@ -366,8 +361,8 @@ go tool cover -html=coverage.out
 |---------|------------|----------------|
 | `internal/auth` | `token_test.go` | JWT creation, token refresh, credentials parsing |
 | `internal/controller` | `obsykagent_controller_test.go` | Concurrent map access, reconcile lifecycle |
-| `internal/transport` | `client_test.go` | HTTP requests, retry logic, concurrent sends |
-| `internal/ingestion` | `*_test.go`, `integration_test.go` | Event handling, informer sync, graceful shutdown |
+| `internal/transport` | `client_test.go`, `types_test.go` | HTTP requests, retry logic, concurrent sends, New*Info converters |
+| `internal/ingestion` | `generic_ingester_test.go`, `manager_test.go`, `integration_test.go` | Generic ingester, event handling, informer sync, graceful shutdown |
 
 ## License
 
