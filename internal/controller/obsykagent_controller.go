@@ -52,6 +52,9 @@ type ObsykAgentReconciler struct {
 	// Clientset is used for SharedInformerFactory in ingestion.
 	Clientset kubernetes.Interface
 
+	// version is the operator version, set at build time.
+	version string
+
 	// agentClients holds a client per ObsykAgent (keyed by namespace/name).
 	agentClients   map[string]*agentClient
 	agentClientsMu sync.RWMutex // Protects agentClients map
@@ -63,12 +66,14 @@ type ObsykAgentReconciler struct {
 // NewObsykAgentReconciler creates a new reconciler.
 // apiReader should be mgr.GetAPIReader() for direct API calls without caching.
 // clientset is the kubernetes.Interface used for SharedInformerFactory.
-func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *runtime.Scheme, clientset kubernetes.Interface) *ObsykAgentReconciler {
+// version is the operator version, typically set at build time via ldflags.
+func NewObsykAgentReconciler(c client.Client, apiReader client.Reader, scheme *runtime.Scheme, clientset kubernetes.Interface, version string) *ObsykAgentReconciler {
 	return &ObsykAgentReconciler{
 		Client:       c,
 		Scheme:       scheme,
 		APIReader:    apiReader,
 		Clientset:    clientset,
+		version:      version,
 		agentClients: make(map[string]*agentClient),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
@@ -318,7 +323,7 @@ func (r *ObsykAgentReconciler) sendHeartbeat(ctx context.Context, agent *obsykv1
 
 	payload := &transport.HeartbeatPayload{
 		ClusterUID:   agent.Status.ClusterUID,
-		AgentVersion: "0.1.0", // TODO: get from build info
+		AgentVersion: r.version,
 	}
 
 	logger.V(1).Info("sending heartbeat",
@@ -379,7 +384,7 @@ func (r *ObsykAgentReconciler) sendSnapshotFromManager(ctx context.Context, agen
 
 	// Set additional fields not available from manager
 	payload.ClusterName = agent.Spec.ClusterName
-	payload.AgentVersion = "0.1.0" // TODO: get from build info
+	payload.AgentVersion = r.version
 
 	logger.Info("complete snapshot prepared",
 		"namespaces", len(payload.Namespaces),

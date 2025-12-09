@@ -10,6 +10,9 @@ FROM --platform=$BUILDPLATFORM golang:1.25-alpine@sha256:26111811bc967321e7b6f85
 ARG TARGETOS
 ARG TARGETARCH
 
+# Version is passed at build time, defaults to "dev"
+ARG VERSION=dev
+
 WORKDIR /workspace
 
 # Install build dependencies
@@ -24,8 +27,8 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 COPY api/ api/
 
-# Build for target platform
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -o manager ./cmd/main.go
+# Build for target platform with version injected
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -ldflags="-X main.version=${VERSION}" -a -o manager ./cmd/main.go
 
 # Runtime stage
 # Pinned to manifest list digest for supply chain security (supports all platforms)
