@@ -22,6 +22,10 @@ import (
 )
 
 var (
+	// version is set at build time via ldflags.
+	// Example: go build -ldflags="-X main.version=v1.0.0"
+	version = "dev"
+
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -73,6 +77,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	setupLog.Info("starting operator", "version", version)
+
 	// Register ObsykAgent controller
 	// Pass APIReader for direct API calls (secrets) without cluster-wide caching
 	// Pass clientset for SharedInformerFactory used by ingestion manager
@@ -81,6 +87,7 @@ func main() {
 		mgr.GetAPIReader(),
 		mgr.GetScheme(),
 		clientset,
+		version,
 	)
 	if err = reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ObsykAgent")

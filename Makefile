@@ -12,6 +12,10 @@ GOOS ?= linux
 GOARCH ?= amd64
 CGO_ENABLED ?= 0
 
+# Version is set from git tag or defaults to dev
+GIT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -X main.version=$(GIT_VERSION)
+
 # Tool versions
 CONTROLLER_GEN_VERSION ?= v0.14.0
 GOLANGCI_LINT_VERSION ?= v1.62.2
@@ -52,15 +56,15 @@ test-short: ## Run tests (short mode)
 
 .PHONY: build
 build: ## Build manager binary
-	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -a -o bin/manager ./cmd/main.go
+	CGO_ENABLED=$(CGO_ENABLED) GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags="$(LDFLAGS)" -a -o bin/manager ./cmd/main.go
 
 .PHONY: run
 run: ## Run the controller locally
-	go run ./cmd/main.go
+	go run -ldflags="$(LDFLAGS)" ./cmd/main.go
 
 .PHONY: docker-build
 docker-build: ## Build docker image
-	docker build -t $(IMG) .
+	docker build --build-arg VERSION=$(GIT_VERSION) -t $(IMG) .
 
 .PHONY: docker-push
 docker-push: ## Push docker image
@@ -68,7 +72,7 @@ docker-push: ## Push docker image
 
 .PHONY: docker-buildx
 docker-buildx: ## Build and push docker image for cross-platform support
-	docker buildx build --platform linux/amd64,linux/arm64 -t $(IMG) --push .
+	docker buildx build --build-arg VERSION=$(GIT_VERSION) --platform linux/amd64,linux/arm64 -t $(IMG) --push .
 
 ##@ Code Generation
 
