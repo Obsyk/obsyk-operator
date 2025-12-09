@@ -162,25 +162,25 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		ac.ingestionManager = r.startIngestionManager(ctx, agent, ac.transport)
 	}
 
+	// Wait for ingestion manager to be ready before proceeding
+	// This ensures we have accurate resource counts from informers
+	if ac.ingestionManager == nil || !ac.ingestionManager.IsStarted() {
+		logger.Info("waiting for ingestion manager to start")
+		return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+	}
+
 	// Check if we need to send initial snapshot
 	if agent.Status.LastSnapshotTime == nil {
-		// Wait for ingestion manager to be ready before sending snapshot
-		if ac.ingestionManager != nil && ac.ingestionManager.IsStarted() {
-			// Use ingestion manager for complete snapshot with all 20 resource types
-			if err := r.sendSnapshotFromManager(ctx, agent, ac); err != nil {
-				logger.Error(err, "failed to send snapshot")
-				r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
-					"SnapshotFailed", err.Error())
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
-			}
-			now := metav1.Now()
-			agent.Status.LastSnapshotTime = &now
-			agent.Status.LastSyncTime = &now
-		} else {
-			// Ingestion manager not ready yet, requeue quickly
-			logger.Info("waiting for ingestion manager to start")
-			return ctrl.Result{RequeueAfter: 2 * time.Second}, nil
+		// Use ingestion manager for complete snapshot with all 20 resource types
+		if err := r.sendSnapshotFromManager(ctx, agent, ac); err != nil {
+			logger.Error(err, "failed to send snapshot")
+			r.setCondition(agent, obsykv1.ConditionTypeSyncing, metav1.ConditionFalse,
+				"SnapshotFailed", err.Error())
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, r.Status().Update(ctx, agent)
 		}
+		now := metav1.Now()
+		agent.Status.LastSnapshotTime = &now
+		agent.Status.LastSyncTime = &now
 	} else {
 		// Send periodic heartbeat
 		if err := r.sendHeartbeat(ctx, agent, ac.transport); err != nil {
