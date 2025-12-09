@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: obsykagents.obsyk.io
 spec:
   group: obsyk.io
@@ -132,16 +132,8 @@ spec:
                 description: Conditions represent the latest available observations
                   of the agent's state.
                 items:
-                  description: "Condition contains details for one aspect of the current
-                    state of this API Resource.\n---\nThis struct is intended for
-                    direct use as an array at the field path .status.conditions.  For
-                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
-                    observations of a foo's current state.\n\t    // Known .status.conditions.type
-                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
-                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
-                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
-                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
-                    \   // other fields\n\t}"
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
                     lastTransitionTime:
                       description: |-
@@ -182,12 +174,7 @@ spec:
                       - Unknown
                       type: string
                     type:
-                      description: |-
-                        type of condition in CamelCase or in foo.example.com/CamelCase.
-                        ---
-                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
-                        useful (see .node.status.conditions), the ability to deconflict is important.
-                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
                       maxLength: 316
                       pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
@@ -220,16 +207,90 @@ spec:
               resourceCounts:
                 description: ResourceCounts tracks the number of watched resources.
                 properties:
+                  clusterRoleBindings:
+                    description: ClusterRoleBindings is the count of cluster role
+                      bindings being watched.
+                    format: int32
+                    type: integer
+                  clusterRoles:
+                    description: ClusterRoles is the count of cluster roles being
+                      watched.
+                    format: int32
+                    type: integer
+                  configMaps:
+                    description: ConfigMaps is the count of configmaps being watched.
+                    format: int32
+                    type: integer
+                  cronJobs:
+                    description: CronJobs is the count of cronjobs being watched.
+                    format: int32
+                    type: integer
+                  daemonSets:
+                    description: DaemonSets is the count of daemonsets being watched.
+                    format: int32
+                    type: integer
+                  deployments:
+                    description: Deployments is the count of deployments being watched.
+                    format: int32
+                    type: integer
+                  events:
+                    description: Events is the count of events being watched.
+                    format: int32
+                    type: integer
+                  ingresses:
+                    description: Ingresses is the count of ingresses being watched.
+                    format: int32
+                    type: integer
+                  jobs:
+                    description: Jobs is the count of jobs being watched.
+                    format: int32
+                    type: integer
                   namespaces:
                     description: Namespaces is the count of namespaces being watched.
+                    format: int32
+                    type: integer
+                  networkPolicies:
+                    description: NetworkPolicies is the count of network policies
+                      being watched.
+                    format: int32
+                    type: integer
+                  nodes:
+                    description: Nodes is the count of nodes being watched.
                     format: int32
                     type: integer
                   pods:
                     description: Pods is the count of pods being watched.
                     format: int32
                     type: integer
+                  pvcs:
+                    description: PVCs is the count of persistent volume claims being
+                      watched.
+                    format: int32
+                    type: integer
+                  roleBindings:
+                    description: RoleBindings is the count of role bindings being
+                      watched.
+                    format: int32
+                    type: integer
+                  roles:
+                    description: Roles is the count of roles being watched.
+                    format: int32
+                    type: integer
+                  secrets:
+                    description: Secrets is the count of secrets being watched.
+                    format: int32
+                    type: integer
+                  serviceAccounts:
+                    description: ServiceAccounts is the count of service accounts
+                      being watched.
+                    format: int32
+                    type: integer
                   services:
                     description: Services is the count of services being watched.
+                    format: int32
+                    type: integer
+                  statefulSets:
+                    description: StatefulSets is the count of statefulsets being watched.
                     format: int32
                     type: integer
                 type: object

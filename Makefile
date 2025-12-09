@@ -17,7 +17,7 @@ GIT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 LDFLAGS := -X main.version=$(GIT_VERSION)
 
 # Tool versions
-CONTROLLER_GEN_VERSION ?= v0.14.0
+CONTROLLER_GEN_VERSION ?= v0.19.0
 GOLANGCI_LINT_VERSION ?= v1.62.2
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -84,11 +84,12 @@ generate: controller-gen ## Generate code (DeepCopy methods)
 .PHONY: manifests
 manifests: controller-gen ## Generate CRD manifests
 	$(CONTROLLER_GEN) crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	@cp config/crd/bases/*.yaml charts/obsyk-operator/crds/
 
 ##@ CI/CD
 
 .PHONY: ci
-ci: lint test build ## Run all CI checks (lint, test, build)
+ci: lint test build verify-manifests ## Run all CI checks (lint, test, build, verify-manifests)
 
 .PHONY: verify
 verify: fmt ## Verify code formatting (for CI)
@@ -97,6 +98,15 @@ verify: fmt ## Verify code formatting (for CI)
 		git diff; \
 		exit 1; \
 	fi
+
+.PHONY: verify-manifests
+verify-manifests: manifests ## Verify CRD manifests are up to date
+	@if [ -n "$$(git diff --name-only config/crd/ charts/obsyk-operator/crds/)" ]; then \
+		echo "CRD manifests are out of date. Run 'make manifests' and copy to charts/obsyk-operator/crds/"; \
+		git diff config/crd/ charts/obsyk-operator/crds/; \
+		exit 1; \
+	fi
+	@echo "CRD manifests are up to date"
 
 ##@ Tools
 
