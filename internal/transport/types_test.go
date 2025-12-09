@@ -11,6 +11,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -1662,5 +1663,484 @@ func TestNewPVCInfo_Defaults(t *testing.T) {
 	}
 	if info.VolumeMode != "" {
 		t.Errorf("VolumeMode = %s, want empty", info.VolumeMode)
+	}
+}
+
+func TestNewRoleInfo(t *testing.T) {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-role",
+			Namespace: "default",
+			UID:       "role-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "services"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "pods"}, // "pods" is duplicate, should be deduplicated
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+
+	info := NewRoleInfo(role)
+
+	if info.UID != "role-uid-123" {
+		t.Errorf("UID = %s, want role-uid-123", info.UID)
+	}
+	if info.Name != "test-role" {
+		t.Errorf("Name = %s, want test-role", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.IsCluster {
+		t.Error("IsCluster should be false for Role")
+	}
+	if info.RuleCount != 2 {
+		t.Errorf("RuleCount = %d, want 2", info.RuleCount)
+	}
+	// Resources should be deduplicated: pods, services, deployments
+	if len(info.Resources) != 3 {
+		t.Errorf("Resources count = %d, want 3 (deduplicated)", len(info.Resources))
+	}
+	if info.Labels["app"] != "test" {
+		t.Errorf("Labels[app] = %s, want test", info.Labels["app"])
+	}
+	if info.K8sCreatedAt == nil {
+		t.Error("K8sCreatedAt should not be nil")
+	}
+}
+
+func TestNewRoleInfo_Empty(t *testing.T) {
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "empty-role",
+			Namespace: "default",
+			UID:       "role-uid-456",
+		},
+		Rules: []rbacv1.PolicyRule{},
+	}
+
+	info := NewRoleInfo(role)
+
+	if info.RuleCount != 0 {
+		t.Errorf("RuleCount = %d, want 0", info.RuleCount)
+	}
+	if len(info.Resources) != 0 {
+		t.Errorf("Resources count = %d, want 0", len(info.Resources))
+	}
+}
+
+func TestNewClusterRoleInfo(t *testing.T) {
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "test-clusterrole",
+			UID:    "crole-uid-123",
+			Labels: map[string]string{"tier": "admin"},
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"*"},
+				Resources: []string{"*"},
+				Verbs:     []string{"*"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes", "namespaces"},
+				Verbs:     []string{"get", "list"},
+			},
+		},
+	}
+
+	info := NewClusterRoleInfo(clusterRole)
+
+	if info.UID != "crole-uid-123" {
+		t.Errorf("UID = %s, want crole-uid-123", info.UID)
+	}
+	if info.Name != "test-clusterrole" {
+		t.Errorf("Name = %s, want test-clusterrole", info.Name)
+	}
+	if info.Namespace != "" {
+		t.Errorf("Namespace = %s, want empty for ClusterRole", info.Namespace)
+	}
+	if !info.IsCluster {
+		t.Error("IsCluster should be true for ClusterRole")
+	}
+	if info.RuleCount != 2 {
+		t.Errorf("RuleCount = %d, want 2", info.RuleCount)
+	}
+	// Resources: *, nodes, namespaces
+	if len(info.Resources) != 3 {
+		t.Errorf("Resources count = %d, want 3", len(info.Resources))
+	}
+	if info.Labels["tier"] != "admin" {
+		t.Errorf("Labels[tier] = %s, want admin", info.Labels["tier"])
+	}
+	if info.K8sCreatedAt == nil {
+		t.Error("K8sCreatedAt should not be nil")
+	}
+}
+
+func TestNewClusterRoleInfo_Empty(t *testing.T) {
+	clusterRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "empty-clusterrole",
+			UID:  "crole-uid-456",
+		},
+		Rules: []rbacv1.PolicyRule{},
+	}
+
+	info := NewClusterRoleInfo(clusterRole)
+
+	if info.RuleCount != 0 {
+		t.Errorf("RuleCount = %d, want 0", info.RuleCount)
+	}
+	if len(info.Resources) != 0 {
+		t.Errorf("Resources count = %d, want 0", len(info.Resources))
+	}
+	if !info.IsCluster {
+		t.Error("IsCluster should be true for ClusterRole")
+	}
+}
+
+func TestNewRoleBindingInfo(t *testing.T) {
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-rolebinding",
+			Namespace: "default",
+			UID:       "rb-uid-123",
+			Labels:    map[string]string{"app": "test"},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     "test-role",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "test-sa",
+				Namespace: "default",
+			},
+			{
+				Kind: "User",
+				Name: "test-user",
+			},
+			{
+				Kind: "Group",
+				Name: "test-group",
+			},
+		},
+	}
+
+	info := NewRoleBindingInfo(rb)
+
+	if info.UID != "rb-uid-123" {
+		t.Errorf("UID = %s, want rb-uid-123", info.UID)
+	}
+	if info.Name != "test-rolebinding" {
+		t.Errorf("Name = %s, want test-rolebinding", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.IsCluster {
+		t.Error("IsCluster should be false for RoleBinding")
+	}
+	if info.RoleRef.Kind != "Role" {
+		t.Errorf("RoleRef.Kind = %s, want Role", info.RoleRef.Kind)
+	}
+	if info.RoleRef.Name != "test-role" {
+		t.Errorf("RoleRef.Name = %s, want test-role", info.RoleRef.Name)
+	}
+	if len(info.Subjects) != 3 {
+		t.Fatalf("Subjects count = %d, want 3", len(info.Subjects))
+	}
+	if info.Subjects[0].Kind != "ServiceAccount" {
+		t.Errorf("Subjects[0].Kind = %s, want ServiceAccount", info.Subjects[0].Kind)
+	}
+	if info.Subjects[0].Name != "test-sa" {
+		t.Errorf("Subjects[0].Name = %s, want test-sa", info.Subjects[0].Name)
+	}
+	if info.Subjects[0].Namespace != "default" {
+		t.Errorf("Subjects[0].Namespace = %s, want default", info.Subjects[0].Namespace)
+	}
+	if info.Labels["app"] != "test" {
+		t.Errorf("Labels[app] = %s, want test", info.Labels["app"])
+	}
+	if info.K8sCreatedAt == nil {
+		t.Error("K8sCreatedAt should not be nil")
+	}
+}
+
+func TestNewRoleBindingInfo_NoSubjects(t *testing.T) {
+	rb := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "empty-rolebinding",
+			Namespace: "default",
+			UID:       "rb-uid-456",
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind: "Role",
+			Name: "some-role",
+		},
+		Subjects: []rbacv1.Subject{},
+	}
+
+	info := NewRoleBindingInfo(rb)
+
+	if len(info.Subjects) != 0 {
+		t.Errorf("Subjects count = %d, want 0", len(info.Subjects))
+	}
+	if info.IsCluster {
+		t.Error("IsCluster should be false for RoleBinding")
+	}
+}
+
+func TestNewClusterRoleBindingInfo(t *testing.T) {
+	crb := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "test-clusterrolebinding",
+			UID:    "crb-uid-123",
+			Labels: map[string]string{"tier": "admin"},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "admin-sa",
+				Namespace: "kube-system",
+			},
+			{
+				Kind: "Group",
+				Name: "system:masters",
+			},
+		},
+	}
+
+	info := NewClusterRoleBindingInfo(crb)
+
+	if info.UID != "crb-uid-123" {
+		t.Errorf("UID = %s, want crb-uid-123", info.UID)
+	}
+	if info.Name != "test-clusterrolebinding" {
+		t.Errorf("Name = %s, want test-clusterrolebinding", info.Name)
+	}
+	if info.Namespace != "" {
+		t.Errorf("Namespace = %s, want empty for ClusterRoleBinding", info.Namespace)
+	}
+	if !info.IsCluster {
+		t.Error("IsCluster should be true for ClusterRoleBinding")
+	}
+	if info.RoleRef.Kind != "ClusterRole" {
+		t.Errorf("RoleRef.Kind = %s, want ClusterRole", info.RoleRef.Kind)
+	}
+	if info.RoleRef.Name != "cluster-admin" {
+		t.Errorf("RoleRef.Name = %s, want cluster-admin", info.RoleRef.Name)
+	}
+	if len(info.Subjects) != 2 {
+		t.Fatalf("Subjects count = %d, want 2", len(info.Subjects))
+	}
+	if info.Subjects[0].Kind != "ServiceAccount" {
+		t.Errorf("Subjects[0].Kind = %s, want ServiceAccount", info.Subjects[0].Kind)
+	}
+	if info.Subjects[0].Name != "admin-sa" {
+		t.Errorf("Subjects[0].Name = %s, want admin-sa", info.Subjects[0].Name)
+	}
+	if info.Subjects[0].Namespace != "kube-system" {
+		t.Errorf("Subjects[0].Namespace = %s, want kube-system", info.Subjects[0].Namespace)
+	}
+	if info.Subjects[1].Kind != "Group" {
+		t.Errorf("Subjects[1].Kind = %s, want Group", info.Subjects[1].Kind)
+	}
+	if info.Subjects[1].Name != "system:masters" {
+		t.Errorf("Subjects[1].Name = %s, want system:masters", info.Subjects[1].Name)
+	}
+	if info.Labels["tier"] != "admin" {
+		t.Errorf("Labels[tier] = %s, want admin", info.Labels["tier"])
+	}
+	if info.K8sCreatedAt == nil {
+		t.Error("K8sCreatedAt should not be nil")
+	}
+}
+
+func TestNewClusterRoleBindingInfo_NoSubjects(t *testing.T) {
+	crb := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "empty-clusterrolebinding",
+			UID:  "crb-uid-456",
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind: "ClusterRole",
+			Name: "some-clusterrole",
+		},
+		Subjects: []rbacv1.Subject{},
+	}
+
+	info := NewClusterRoleBindingInfo(crb)
+
+	if len(info.Subjects) != 0 {
+		t.Errorf("Subjects count = %d, want 0", len(info.Subjects))
+	}
+	if !info.IsCluster {
+		t.Error("IsCluster should be true for ClusterRoleBinding")
+	}
+}
+
+func TestNewEventInfo(t *testing.T) {
+	firstTime := metav1.NewTime(time.Now().Add(-1 * time.Hour))
+	lastTime := metav1.NewTime(time.Now().Add(-5 * time.Minute))
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-event.12345",
+			Namespace: "default",
+			UID:       "event-uid-123",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "test-pod",
+			Namespace: "default",
+			UID:       "pod-uid-456",
+		},
+		Reason:  "Scheduled",
+		Message: "Successfully assigned default/test-pod to node-1",
+		Type:    "Normal",
+		Source: corev1.EventSource{
+			Component: "default-scheduler",
+			Host:      "node-1",
+		},
+		FirstTimestamp: firstTime,
+		LastTimestamp:  lastTime,
+		Count:          3,
+	}
+
+	info := NewEventInfo(event)
+
+	if info.UID != "event-uid-123" {
+		t.Errorf("UID = %s, want event-uid-123", info.UID)
+	}
+	if info.Name != "test-event.12345" {
+		t.Errorf("Name = %s, want test-event.12345", info.Name)
+	}
+	if info.Namespace != "default" {
+		t.Errorf("Namespace = %s, want default", info.Namespace)
+	}
+	if info.Type != "Normal" {
+		t.Errorf("Type = %s, want Normal", info.Type)
+	}
+	if info.Reason != "Scheduled" {
+		t.Errorf("Reason = %s, want Scheduled", info.Reason)
+	}
+	if info.Message != "Successfully assigned default/test-pod to node-1" {
+		t.Errorf("Message = %s, want Successfully assigned default/test-pod to node-1", info.Message)
+	}
+	if info.InvolvedObject.Kind != "Pod" {
+		t.Errorf("InvolvedObject.Kind = %s, want Pod", info.InvolvedObject.Kind)
+	}
+	if info.InvolvedObject.Name != "test-pod" {
+		t.Errorf("InvolvedObject.Name = %s, want test-pod", info.InvolvedObject.Name)
+	}
+	if info.InvolvedObject.Namespace != "default" {
+		t.Errorf("InvolvedObject.Namespace = %s, want default", info.InvolvedObject.Namespace)
+	}
+	if info.InvolvedObject.UID != "pod-uid-456" {
+		t.Errorf("InvolvedObject.UID = %s, want pod-uid-456", info.InvolvedObject.UID)
+	}
+	if info.Source.Component != "default-scheduler" {
+		t.Errorf("Source.Component = %s, want default-scheduler", info.Source.Component)
+	}
+	if info.Source.Host != "node-1" {
+		t.Errorf("Source.Host = %s, want node-1", info.Source.Host)
+	}
+	if info.Count != 3 {
+		t.Errorf("Count = %d, want 3", info.Count)
+	}
+	if info.FirstTimestamp == nil {
+		t.Error("FirstTimestamp should not be nil")
+	}
+	if info.LastTimestamp == nil {
+		t.Error("LastTimestamp should not be nil")
+	}
+	if info.K8sCreatedAt == nil {
+		t.Error("K8sCreatedAt should not be nil")
+	}
+}
+
+func TestNewEventInfo_Warning(t *testing.T) {
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "warning-event.67890",
+			Namespace: "kube-system",
+			UID:       "event-uid-warning",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Node",
+			Name:      "node-1",
+			Namespace: "",
+			UID:       "node-uid-123",
+		},
+		Reason:  "NodeNotReady",
+		Message: "Node node-1 status is now: NodeNotReady",
+		Type:    "Warning",
+		Source: corev1.EventSource{
+			Component: "node-controller",
+		},
+		Count: 1,
+	}
+
+	info := NewEventInfo(event)
+
+	if info.Type != "Warning" {
+		t.Errorf("Type = %s, want Warning", info.Type)
+	}
+	if info.Reason != "NodeNotReady" {
+		t.Errorf("Reason = %s, want NodeNotReady", info.Reason)
+	}
+	if info.InvolvedObject.Kind != "Node" {
+		t.Errorf("InvolvedObject.Kind = %s, want Node", info.InvolvedObject.Kind)
+	}
+	if info.InvolvedObject.Namespace != "" {
+		t.Errorf("InvolvedObject.Namespace = %s, want empty for Node", info.InvolvedObject.Namespace)
+	}
+	if info.Source.Host != "" {
+		t.Errorf("Source.Host = %s, want empty", info.Source.Host)
+	}
+}
+
+func TestNewEventInfo_NoTimestamps(t *testing.T) {
+	// Test event with zero timestamps (should result in nil pointers)
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "no-timestamp-event",
+			Namespace: "default",
+			UID:       "event-uid-no-ts",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "Pod",
+			Name: "test-pod",
+		},
+		Reason:  "Created",
+		Message: "Created container",
+		Type:    "Normal",
+		Count:   1,
+	}
+
+	info := NewEventInfo(event)
+
+	if info.FirstTimestamp != nil {
+		t.Errorf("FirstTimestamp should be nil for zero timestamp, got %v", info.FirstTimestamp)
+	}
+	if info.LastTimestamp != nil {
+		t.Errorf("LastTimestamp should be nil for zero timestamp, got %v", info.LastTimestamp)
 	}
 }
