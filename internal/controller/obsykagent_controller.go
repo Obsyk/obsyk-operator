@@ -155,14 +155,15 @@ func (r *ObsykAgentReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		agent.Status.ClusterUID = clusterUID
 	}
 
-	// Check if we need to start ingestion manager and send initial snapshot
-	if agent.Status.LastSnapshotTime == nil {
-		// Start ingestion manager if not already running
-		if ac.ingestionManager == nil {
-			logger.Info("starting ingestion manager for agent")
-			ac.ingestionManager = r.startIngestionManager(ctx, agent, ac.transport)
-		}
+	// Always start ingestion manager if not already running
+	// This ensures resourceCounts are available even after operator restart
+	if ac.ingestionManager == nil {
+		logger.Info("starting ingestion manager for agent")
+		ac.ingestionManager = r.startIngestionManager(ctx, agent, ac.transport)
+	}
 
+	// Check if we need to send initial snapshot
+	if agent.Status.LastSnapshotTime == nil {
 		// Wait for ingestion manager to be ready before sending snapshot
 		if ac.ingestionManager != nil && ac.ingestionManager.IsStarted() {
 			// Use ingestion manager for complete snapshot with all 20 resource types
