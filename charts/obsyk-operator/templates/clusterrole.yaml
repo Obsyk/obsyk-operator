@@ -184,7 +184,7 @@ rules:
       - patch
       - update
       - watch
-  # Events for leader election announcements
+  # Events for leader election announcements and cluster event ingestion
   - apiGroups:
       - ""
     resources:
@@ -192,3 +192,5 @@ rules:
     verbs:
       - create
       - patch
+      - list
+      - watch
