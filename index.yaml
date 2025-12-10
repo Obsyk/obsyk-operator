@@ -2,8 +2,32 @@ apiVersion: v1
 entries:
   obsyk-operator:
   - apiVersion: v2
+    appVersion: v0.3.2
+    created: "2025-12-10T07:02:16.765280103Z"
+    description: Kubernetes operator that connects your cluster to the Obsyk observability
+      platform
+    digest: 632be3e6f9b852aba81daa6c54c239888135d9649d2af47f8369f76275404cd5
+    home: https://obsyk.ai
+    keywords:
+    - observability
+    - kubernetes
+    - operator
+    - monitoring
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: support@obsyk.com
+      name: Obsyk
+      url: https://obsyk.ai
+    name: obsyk-operator
+    sources:
+    - https://github.com/Obsyk/obsyk-operator
+    type: application
+    urls:
+    - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.3.2.tgz
+    version: 0.3.2
+  - apiVersion: v2
     appVersion: v0.3.1
-    created: "2025-12-10T05:53:17.911389027Z"
+    created: "2025-12-10T07:02:16.76474746Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 41ecc8b8b0b067b7add04ae8fc78e872d25cde52951d6bbfb7960da0a12b90e1
@@ -27,7 +51,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: v0.3.0
-    created: "2025-12-10T05:53:17.910883036Z"
+    created: "2025-12-10T07:02:16.764263698Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: f072050dea6ff2c8a4444b51bf0adc1601df3e60746f8d9f704dfa8276953193
@@ -51,7 +75,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: v0.2.1
-    created: "2025-12-10T05:53:17.910341028Z"
+    created: "2025-12-10T07:02:16.7637281Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1ca12351c4422ee5ed238214ddb139ec7f727977ecd5011af2511b14c1ed5957
@@ -75,7 +99,7 @@ entries:
     version: 0.2.1
   - apiVersion: v2
     appVersion: v0.2.0
-    created: "2025-12-10T05:53:17.909760198Z"
+    created: "2025-12-10T07:02:16.763204494Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1c790832c8f9df4eb146e23905b97cee24b17bb8ad8974476cc36e05c25fe039
@@ -99,7 +123,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2025-12-10T05:53:17.909108486Z"
+    created: "2025-12-10T07:02:16.762631246Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: eef9066c297c3cd9708a749a1fe86e4d2f2939bc50b334362ec692ce33fa6dbc
@@ -121,4 +145,4 @@ entries:
     urls:
     - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-10T05:53:17.908425877Z"
+generated: "2025-12-10T07:02:16.762058267Z"
