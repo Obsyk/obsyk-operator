@@ -31,6 +31,12 @@ agent:
   credentialsSecretRef:
     name: "obsyk-credentials"
 
+  # Optional: Inline credentials (alternative to manual Secret creation)
+  # If both clientId and privateKey are provided, the chart will create
+  # the credentials Secret automatically.
+  # clientId: ""
+  # privateKey: ""
+
   # How often to sync with the platform
   syncInterval: "5m"
 

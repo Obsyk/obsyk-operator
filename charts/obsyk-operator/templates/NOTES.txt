@@ -6,21 +6,26 @@ Your Obsyk agent has been configured with:
   - Cluster Name: {{ .Values.agent.clusterName }}
   - Platform URL: {{ .Values.agent.platformURL }}
 
-IMPORTANT: Make sure you have created the OAuth2 credentials secret.
+{{- if and .Values.agent.clientId .Values.agent.privateKey }}
+The credentials secret "{{ .Values.agent.credentialsSecretRef.name }}" has been created automatically.
+{{- else }}
+IMPORTANT: Create the OAuth2 credentials secret before the agent can connect.
 
-1. Generate ECDSA P-256 key pair (if not already done):
+Option A: Reinstall with inline credentials (recommended):
 
-   openssl ecparam -name prime256v1 -genkey -noout -out private-key.pem
-   openssl ec -in private-key.pem -pubout -out public-key.pem
+   helm upgrade obsyk-operator obsyk/obsyk-operator \
+     --namespace {{ .Release.Namespace }} \
+     --set agent.clusterName={{ .Values.agent.clusterName | quote }} \
+     --set agent.clientId="YOUR_CLIENT_ID" \
+     --set-file agent.privateKey=private-key.pem
 
-2. Upload public key to platform UI and get your client_id
-
-3. Create the credentials secret:
+Option B: Create secret manually:
 
    kubectl create secret generic {{ .Values.agent.credentialsSecretRef.name }} \
      --namespace {{ .Release.Namespace }} \
      --from-literal=client_id=YOUR_CLIENT_ID \
      --from-file=private_key=private-key.pem
+{{- end }}
 
 To check the agent status:
 
