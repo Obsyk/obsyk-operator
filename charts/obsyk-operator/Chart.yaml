@@ -6,7 +6,7 @@ version: 0.0.0-dev
 appVersion: "v0.0.0-dev"
 kubeVersion: ">=1.26.0-0"
 home: https://obsyk.ai
-icon: https://obsyk.ai/logo.png
+icon: https://raw.githubusercontent.com/Obsyk/obsyk-operator/main/charts/obsyk-operator/logo.png
 sources:
   - https://github.com/Obsyk/obsyk-operator
 maintainers:
