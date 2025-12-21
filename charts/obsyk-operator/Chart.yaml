@@ -6,14 +6,30 @@ version: 0.0.0-dev
 appVersion: "v0.0.0-dev"
 kubeVersion: ">=1.26.0-0"
 home: https://obsyk.ai
+icon: https://obsyk.ai/logo.png
 sources:
   - https://github.com/Obsyk/obsyk-operator
 maintainers:
   - name: Obsyk
-    email: support@obsyk.com
+    email: support@obsyk.ai
     url: https://obsyk.ai
 keywords:
   - observability
   - kubernetes
   - operator
   - monitoring
+  - visibility
+  - security
+annotations:
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/links: |
+    - name: Website
+      url: https://obsyk.ai
+    - name: Documentation
+      url: https://docs.obsyk.ai
+    - name: Support
+      url: https://obsyk.ai/support
