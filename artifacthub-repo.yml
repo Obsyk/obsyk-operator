@@ -1,0 +1,9 @@
+# Copyright (c) Obsyk. All rights reserved.
+# Proprietary and confidential.
+
+# Artifact Hub repository metadata
+# https://artifacthub.io/docs/topics/repositories/
+repositoryID: 0a7b47ad-f496-405e-90ec-86c0de0f8615
+owners:
+  - name: Obsyk
+    email: support@obsyk.ai
