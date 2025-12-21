@@ -1,9 +1,49 @@
 apiVersion: v1
 entries:
   obsyk-operator:
+  - annotations:
+      artifacthub.io/category: monitoring-logging
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Website
+          url: https://obsyk.ai
+        - name: Documentation
+          url: https://docs.obsyk.ai
+        - name: Support
+          url: https://obsyk.ai/support
+      artifacthub.io/operator: "true"
+      artifacthub.io/operatorCapabilities: Basic Install
+      artifacthub.io/prerelease: "false"
+    apiVersion: v2
+    appVersion: v0.3.4
+    created: "2025-12-21T01:34:27.597229074Z"
+    description: Kubernetes operator that connects your cluster to the Obsyk observability
+      platform
+    digest: 1713ef62d9a07117c987c8e06e2d4f294e0daaae6788215cfd701096704c1b9e
+    home: https://obsyk.ai
+    icon: https://obsyk.ai/logo.png
+    keywords:
+    - observability
+    - kubernetes
+    - operator
+    - monitoring
+    - visibility
+    - security
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: support@obsyk.ai
+      name: Obsyk
+      url: https://obsyk.ai
+    name: obsyk-operator
+    sources:
+    - https://github.com/Obsyk/obsyk-operator
+    type: application
+    urls:
+    - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.3.4.tgz
+    version: 0.3.4
   - apiVersion: v2
     appVersion: v0.3.3
-    created: "2025-12-14T08:20:02.292345687Z"
+    created: "2025-12-21T01:34:27.595937642Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: c272009a158c66ba5763d2077f2a318d81604450dedc2c06f4f7b47394ee6f6d
@@ -27,7 +67,7 @@ entries:
     version: 0.3.3
   - apiVersion: v2
     appVersion: v0.3.2
-    created: "2025-12-14T08:20:02.291845868Z"
+    created: "2025-12-21T01:34:27.595397306Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 632be3e6f9b852aba81daa6c54c239888135d9649d2af47f8369f76275404cd5
@@ -51,7 +91,7 @@ entries:
     version: 0.3.2
   - apiVersion: v2
     appVersion: v0.3.1
-    created: "2025-12-14T08:20:02.291342564Z"
+    created: "2025-12-21T01:34:27.594894449Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 41ecc8b8b0b067b7add04ae8fc78e872d25cde52951d6bbfb7960da0a12b90e1
@@ -75,7 +115,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: v0.3.0
-    created: "2025-12-14T08:20:02.290849417Z"
+    created: "2025-12-21T01:34:27.594373399Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: f072050dea6ff2c8a4444b51bf0adc1601df3e60746f8d9f704dfa8276953193
@@ -99,7 +139,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: v0.2.1
-    created: "2025-12-14T08:20:02.290312592Z"
+    created: "2025-12-21T01:34:27.59387501Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1ca12351c4422ee5ed238214ddb139ec7f727977ecd5011af2511b14c1ed5957
@@ -123,7 +163,7 @@ entries:
     version: 0.2.1
   - apiVersion: v2
     appVersion: v0.2.0
-    created: "2025-12-14T08:20:02.289810209Z"
+    created: "2025-12-21T01:34:27.593315278Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1c790832c8f9df4eb146e23905b97cee24b17bb8ad8974476cc36e05c25fe039
@@ -147,7 +187,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2025-12-14T08:20:02.289244081Z"
+    created: "2025-12-21T01:34:27.592776505Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: eef9066c297c3cd9708a749a1fe86e4d2f2939bc50b334362ec692ce33fa6dbc
@@ -169,4 +209,4 @@ entries:
     urls:
     - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-14T08:20:02.288639003Z"
+generated: "2025-12-21T01:34:27.592173221Z"
