@@ -196,14 +196,26 @@ jobs:
           echo "chart=${CHART_VERSION}" >> $GITHUB_OUTPUT
           echo "app=${APP_VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Package and index Helm chart
+      - name: Import GPG key for Helm signing
+        run: |
+          echo "${{ secrets.HELM_GPG_PRIVATE_KEY }}" | gpg --batch --import
+          # Convert to legacy secring format required by Helm
+          gpg --export-secret-keys > ~/.gnupg/secring.gpg
+
+      - name: Package, sign, and index Helm chart
         run: |
           if [ -d "main/charts/obsyk-operator" ]; then
-            # Package the chart with proper versions
+            # Package and sign the chart with GPG
             helm package main/charts/obsyk-operator \
               --version ${{ steps.version.outputs.chart }} \
               --app-version ${{ steps.version.outputs.app }} \
+              --sign \
+              --key "Obsyk" \
+              --keyring ~/.gnupg/secring.gpg \
               --destination .
+
+            # Copy artifacthub-repo.yml for Verified Publisher badge
+            cp main/artifacthub-repo.yml .
 
             # Remove the main checkout directory before adding to git
             rm -rf main
@@ -214,8 +226,8 @@ jobs:
             # Update the helm repo index
             helm repo index . --url https://obsyk.github.io/obsyk-operator
 
-            # Add only the chart files, not everything
-            git add index.yaml .nojekyll "obsyk-operator-*.tgz"
+            # Add chart files including provenance (.prov) and artifacthub metadata
+            git add index.yaml .nojekyll artifacthub-repo.yml "obsyk-operator-*.tgz" "obsyk-operator-*.tgz.prov"
             git commit -m "Release Helm chart ${{ github.ref_name }}"
             git push
           fi
