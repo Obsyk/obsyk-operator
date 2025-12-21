@@ -1,0 +1,315 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Obsyk Operator Helm Values",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "default": 1,
+      "description": "Number of operator replicas"
+    },
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "default": "ghcr.io/obsyk/obsyk-operator",
+          "description": "Container image repository"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"],
+          "default": "IfNotPresent",
+          "description": "Image pull policy"
+        },
+        "tag": {
+          "type": "string",
+          "default": "",
+          "description": "Image tag (defaults to chart appVersion)"
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "default": [],
+      "description": "Image pull secrets"
+    },
+    "nameOverride": {
+      "type": "string",
+      "default": "",
+      "description": "Override chart name"
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "default": "",
+      "description": "Override full chart name"
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create default ObsykAgent CR"
+        },
+        "clusterName": {
+          "type": "string",
+          "description": "Human-friendly name for this cluster (required)"
+        },
+        "platformURL": {
+          "type": "string",
+          "default": "https://api.obsyk.ai",
+          "description": "Obsyk platform URL"
+        },
+        "credentialsSecretRef": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "default": "obsyk-credentials",
+              "description": "Name of secret containing OAuth2 credentials"
+            }
+          }
+        },
+        "clientId": {
+          "type": "string",
+          "description": "OAuth2 client ID (creates secret if provided with privateKey)"
+        },
+        "privateKey": {
+          "type": "string",
+          "description": "PEM-encoded ECDSA P-256 private key"
+        },
+        "syncInterval": {
+          "type": "string",
+          "default": "5m",
+          "description": "How often to sync with platform"
+        },
+        "rateLimit": {
+          "type": "object",
+          "properties": {
+            "eventsPerSecond": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 10,
+              "description": "Maximum events per second"
+            },
+            "burstSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 20,
+              "description": "Burst size for temporary spikes"
+            }
+          }
+        }
+      }
+    },
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create service account"
+        },
+        "annotations": {
+          "type": "object",
+          "default": {},
+          "description": "Service account annotations"
+        },
+        "name": {
+          "type": "string",
+          "default": "",
+          "description": "Service account name"
+        }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "default": {},
+      "description": "Pod annotations"
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "properties": {
+        "runAsNonRoot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run as non-root user"
+        },
+        "runAsUser": {
+          "type": "integer",
+          "default": 65532,
+          "description": "User ID to run as"
+        },
+        "runAsGroup": {
+          "type": "integer",
+          "default": 65532,
+          "description": "Group ID to run as"
+        },
+        "fsGroup": {
+          "type": "integer",
+          "default": 65532,
+          "description": "Filesystem group ID"
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Allow privilege escalation"
+        },
+        "privileged": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run as privileged"
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "default": true,
+          "description": "Read-only root filesystem"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "default": "200m",
+              "description": "CPU limit"
+            },
+            "memory": {
+              "type": "string",
+              "default": "256Mi",
+              "description": "Memory limit"
+            }
+          }
+        },
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "default": "100m",
+              "description": "CPU request"
+            },
+            "memory": {
+              "type": "string",
+              "default": "128Mi",
+              "description": "Memory request"
+            }
+          }
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "default": {},
+      "description": "Node selector"
+    },
+    "tolerations": {
+      "type": "array",
+      "default": [],
+      "description": "Tolerations"
+    },
+    "affinity": {
+      "type": "object",
+      "default": {},
+      "description": "Affinity rules"
+    },
+    "leaderElection": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable leader election"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable metrics endpoint"
+        },
+        "port": {
+          "type": "integer",
+          "default": 8080,
+          "description": "Metrics port"
+        }
+      }
+    },
+    "healthProbe": {
+      "type": "object",
+      "properties": {
+        "port": {
+          "type": "integer",
+          "default": 8081,
+          "description": "Health probe port"
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable NetworkPolicy for enterprise environments"
+        },
+        "kubeAPIServerCIDR": {
+          "type": "string",
+          "description": "CIDR for Kubernetes API server (auto-detected if not set)"
+        },
+        "platformCIDR": {
+          "type": "string",
+          "description": "CIDR for Obsyk platform (allows all external HTTPS if not set)"
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "namespaceSelector": {
+              "type": "object",
+              "default": {},
+              "description": "Namespace selector for metrics scraping"
+            }
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable PodDisruptionBudget"
+        },
+        "minAvailable": {
+          "type": "integer",
+          "default": 1,
+          "description": "Minimum available pods"
+        },
+        "maxUnavailable": {
+          "type": "integer",
+          "description": "Maximum unavailable pods (alternative to minAvailable)"
+        }
+      }
+    },
+    "priorityClassName": {
+      "type": "string",
+      "description": "Priority class for critical workloads"
+    }
+  }
+}
