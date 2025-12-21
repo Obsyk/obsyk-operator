@@ -26,6 +26,9 @@ annotations:
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: Basic Install
   artifacthub.io/prerelease: "false"
+  artifacthub.io/signKey: |
+    fingerprint: 3B07B70EDB4F179351A2F22C61622AA0ECF09226
+    url: https://obsyk.ai/pgp-key.asc
   artifacthub.io/links: |
     - name: Website
       url: https://obsyk.ai
@@ -33,3 +36,32 @@ annotations:
       url: https://docs.obsyk.ai
     - name: Support
       url: https://obsyk.ai/support
+  artifacthub.io/changes: |
+    - kind: added
+      description: Values schema for Artifact Hub
+    - kind: added
+      description: Helm chart GPG signing
+    - kind: added
+      description: Verified Publisher badge support
+    - kind: added
+      description: CRD documentation
+  artifacthub.io/images: |
+    - name: obsyk-operator
+      image: ghcr.io/obsyk/obsyk-operator
+  artifacthub.io/crds: |
+    - kind: ObsykAgent
+      version: v1
+      name: obsykagent
+      displayName: Obsyk Agent
+      description: Configures the Obsyk agent for cluster monitoring
+  artifacthub.io/crdsExamples: |
+    - apiVersion: obsyk.io/v1
+      kind: ObsykAgent
+      metadata:
+        name: obsyk-agent
+        namespace: obsyk-system
+      spec:
+        clusterName: "my-cluster"
+        platformURL: "https://app.obsyk.ai"
+        credentialsSecretRef:
+          name: obsyk-credentials
