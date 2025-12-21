@@ -1,6 +1,10 @@
 # Obsyk Operator
 
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/obsyk-operator)](https://artifacthub.io/packages/helm/obsyk-operator/obsyk-operator)
+
 Kubernetes operator that connects your cluster to the [Obsyk](https://obsyk.ai) observability platform. Deploy once and automatically stream cluster metadata to gain visibility across your infrastructure.
+
+The Obsyk Operator Helm chart is available on [Artifact Hub](https://artifacthub.io/packages/helm/obsyk-operator/obsyk-operator).
 
 ## Features
 
