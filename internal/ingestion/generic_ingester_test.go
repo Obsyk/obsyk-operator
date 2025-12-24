@@ -19,7 +19,7 @@ import (
 
 // TestGenericIngester_NamespacedResource tests the generic ingester with a namespaced resource (Pod).
 func TestGenericIngester_NamespacedResource(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -128,7 +128,7 @@ func TestGenericIngester_NamespacedResource(t *testing.T) {
 
 // TestGenericIngester_ClusterScopedResource tests the generic ingester with a cluster-scoped resource (Namespace).
 func TestGenericIngester_ClusterScopedResource(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -182,7 +182,7 @@ func TestGenericIngester_ClusterScopedResource(t *testing.T) {
 
 // TestGenericIngester_SkipSameResourceVersion verifies that updates with same resource version are skipped.
 func TestGenericIngester_SkipSameResourceVersion(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -252,7 +252,7 @@ func TestGenericIngester_SkipSameResourceVersion(t *testing.T) {
 
 // TestGenericIngester_ChannelFull verifies behavior when the event channel is full.
 func TestGenericIngester_ChannelFull(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	// Create a channel with zero buffer - will block immediately
@@ -297,7 +297,7 @@ func TestGenericIngester_ChannelFull(t *testing.T) {
 
 // TestGenericIngester_DeletedFinalStateUnknown tests handling of tombstone objects.
 func TestGenericIngester_DeletedFinalStateUnknown(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -338,7 +338,7 @@ func TestGenericIngester_DeletedFinalStateUnknown(t *testing.T) {
 
 // TestGenericIngester_InvalidObjectType tests that invalid objects are handled gracefully.
 func TestGenericIngester_InvalidObjectType(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -370,7 +370,7 @@ func TestGenericIngester_InvalidObjectType(t *testing.T) {
 
 // TestIngestersFromFactory verifies that all 20 ingesters are created.
 func TestIngestersFromFactory(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
@@ -402,7 +402,7 @@ func TestIngestersFromFactory(t *testing.T) {
 
 // TestGenericIngester_AllResourceTypes verifies each resource type can be instantiated and registered.
 func TestGenericIngester_AllResourceTypes(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(clientset, 0)
 
 	eventChan := make(chan ResourceEvent, 10)
