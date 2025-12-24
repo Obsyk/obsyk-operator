@@ -23,7 +23,7 @@ func TestIntegration_FullEventFlow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test-integration")
 
@@ -155,7 +155,7 @@ func TestIntegration_UpdateDeleteFlow(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset(initialPod)
+	clientset := fake.NewClientset(initialPod)
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test-update-delete")
 
@@ -235,7 +235,7 @@ func TestIntegration_ConcurrentResourceCreation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test-concurrent")
 
@@ -307,7 +307,7 @@ func TestIntegration_EventSenderError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	sender.setError(context.DeadlineExceeded)
 	log := ctrl.Log.WithName("test-sender-error")
@@ -381,7 +381,7 @@ func TestIntegration_GracefulShutdownWithPendingEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 
 	// Use a slow sender that tracks how many events were eventually processed
 	var processedCount int32
@@ -470,7 +470,7 @@ func TestIntegration_GetCurrentStateAfterSync(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset(ns, pod, svc)
+	clientset := fake.NewClientset(ns, pod, svc)
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test-get-state")
 
@@ -541,7 +541,7 @@ func TestIntegration_MultipleIngestersNoDeadlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test-no-deadlock")
 
