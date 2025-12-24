@@ -61,7 +61,7 @@ func init() {
 }
 
 func TestNewManager(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -107,7 +107,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestManagerStartStop(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -159,7 +159,7 @@ func TestManagerStartStop(t *testing.T) {
 }
 
 func TestManagerDoubleStart(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -200,7 +200,7 @@ func TestManagerEventProcessing(t *testing.T) {
 			UID:       "pod-uid-123",
 		},
 	}
-	clientset := fake.NewSimpleClientset(pod)
+	clientset := fake.NewClientset(pod)
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -272,7 +272,7 @@ func TestManagerGetCurrentState(t *testing.T) {
 		},
 	}
 
-	clientset := fake.NewSimpleClientset(ns, pod, svc)
+	clientset := fake.NewClientset(ns, pod, svc)
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -354,7 +354,7 @@ func TestResourceEventStruct(t *testing.T) {
 }
 
 func TestManagerRateLimitConfig(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -446,7 +446,7 @@ func TestManagerRateLimitConfig(t *testing.T) {
 }
 
 func TestManagerRateLimitEnforcement(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
@@ -510,7 +510,7 @@ func TestManagerRateLimitEnforcement(t *testing.T) {
 }
 
 func TestManagerRateLimitContextCancellation(t *testing.T) {
-	clientset := fake.NewSimpleClientset()
+	clientset := fake.NewClientset()
 	sender := newMockEventSender()
 	log := ctrl.Log.WithName("test")
 
