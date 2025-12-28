@@ -242,6 +242,96 @@ jobs:
         if: always()
         run: kind delete cluster --name obsyk-pss
 
+  # Log K8s matrix test results to validation history
+  log-k8s-results:
+    name: Log K8s Matrix Results
+    runs-on: ubuntu-latest
+    needs: [k8s-matrix, pss-restricted]
+    if: always()
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Append K8s matrix results to validation log
+        run: |
+          VERSION="${{ github.ref_name }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RESULT="${{ needs.k8s-matrix.result == 'success' && 'pass' || 'fail' }}"
+
+          # Add entry for each K8s version
+          for k8s_version in 1.28 1.30 1.32; do
+            NEW_ENTRY=$(jq -n \
+              --arg type "k8s-version" \
+              --arg version "$VERSION" \
+              --arg k8s_version "$k8s_version" \
+              --arg result "$RESULT" \
+              --arg timestamp "$TIMESTAMP" \
+              --arg run_id "${{ github.run_id }}" \
+              --arg run_url "$RUN_URL" \
+              '{
+                type: $type,
+                version: $version,
+                k8s_version: $k8s_version,
+                result: $result,
+                timestamp: $timestamp,
+                run_id: $run_id,
+                run_url: $run_url
+              }')
+
+            jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+            mv tmp.json .github/cloud-validation.json
+          done
+
+          # Also add PSS restricted result
+          PSS_RESULT="${{ needs.pss-restricted.result == 'success' && 'pass' || 'fail' }}"
+          PSS_ENTRY=$(jq -n \
+            --arg type "pss-restricted" \
+            --arg version "$VERSION" \
+            --arg result "$PSS_RESULT" \
+            --arg timestamp "$TIMESTAMP" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "$RUN_URL" \
+            '{
+              type: $type,
+              version: $version,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url
+            }')
+
+          jq ".validations += [$PSS_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
+
+      - name: Commit validation log
+        run: |
+          git config user.name "obsyk-bot[bot]"
+          git config user.email "obsyk-bot[bot]@users.noreply.github.com"
+          git add .github/cloud-validation.json
+          git diff --staged --quiet || git commit -m "chore: log K8s matrix results for ${{ github.ref_name }}
+
+          K8s versions tested: 1.28, 1.30, 1.32
+          K8s matrix result: ${{ needs.k8s-matrix.result }}
+          PSS restricted result: ${{ needs.pss-restricted.result }}
+          Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push || echo "Nothing to push"
+
   release:
     name: Release
     runs-on: ubuntu-latest

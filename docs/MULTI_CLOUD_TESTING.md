@@ -72,6 +72,10 @@ Tests typically complete in 20-30 minutes per provider.
 Set these in GitHub repository secrets:
 
 ```bash
+# GitHub App (for pushing validation log commits)
+CI_APP_ID          # GitHub App ID
+CI_APP_PRIVATE_KEY # GitHub App private key (PEM format)
+
 # AWS (for EKS)
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
@@ -89,13 +93,63 @@ E2E_PRIVATE_KEY    # Base64-encoded PEM private key
 E2E_CLUSTER_NAME   # Cluster name registered in platform
 ```
 
+## Validation History Log
+
+All test results are logged to `.github/cloud-validation.json` for full transparency and audit trail.
+
+### Log Format
+
+```json
+{
+  "schema_version": 1,
+  "description": "Validation history for obsyk-operator",
+  "validations": [
+    {
+      "type": "k8s-version",
+      "version": "v0.2.0",
+      "k8s_version": "1.28",
+      "result": "pass",
+      "timestamp": "2025-01-15T10:30:00Z",
+      "run_id": "12345678",
+      "run_url": "https://github.com/obsyk/obsyk-operator/actions/runs/12345678"
+    },
+    {
+      "type": "cloud-provider",
+      "version": "v0.2.0",
+      "provider": "eks",
+      "k8s_version": "1.30",
+      "result": "pass",
+      "timestamp": "2025-01-15T11:00:00Z",
+      "run_id": "12345679",
+      "run_url": "https://github.com/obsyk/obsyk-operator/actions/runs/12345679"
+    }
+  ]
+}
+```
+
+### Entry Types
+
+| Type | Description |
+|------|-------------|
+| `k8s-version` | Kubernetes version matrix test (1.28, 1.30, 1.32) |
+| `cloud-provider` | Cloud provider test (EKS, AKS, GKE) |
+| `pss-restricted` | Pod Security Standards restricted mode test |
+
+### Benefits
+
+- **Audit Trail**: Every test is logged with timestamp and run ID
+- **Verification**: Click `run_url` to see the actual GitHub Actions run
+- **History**: View all past validations, not just the latest
+- **Staleness Detection**: Badges show yellow if validated version doesn't match latest release
+
 ## Compatibility Badges
 
-After cloud tests pass, badges in the README are automatically updated:
+Badges are dynamically generated from the validation log:
 
-- **Green**: `EKS | v0.2.0 validated` - Test passed
-- **Red**: `EKS | v0.2.0 failed` - Test failed
-- **Gray**: `EKS | untested` - Not yet tested
+- **Green**: `EKS | v0.2.0 ✓` - Latest release validated
+- **Yellow**: `EKS | v0.1.0 ✓ (not latest)` - Validated, but on older release
+- **Red**: `EKS | v0.2.0 ✗` - Latest release failed
+- **Gray**: `EKS | untested` - No validation history
 
 Badges are stored in `.github/badges/*.json` and rendered via shields.io endpoint URLs.
 

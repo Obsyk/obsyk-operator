@@ -459,9 +459,9 @@ jobs:
         run: |
           gcloud container clusters delete $CLUSTER_NAME --zone $GCP_ZONE --quiet || true
 
-  # Update badges based on test results
-  update-badges:
-    name: Update Badges
+  # Update validation log and regenerate badges
+  update-validation-log:
+    name: Update Validation Log
     runs-on: ubuntu-latest
     needs: [prepare, eks, aks, gke]
     if: always()
@@ -469,103 +469,171 @@ jobs:
       contents: write
 
     steps:
+      # Use GitHub App token for pushing to main branch
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
 
-      - name: Update EKS badge
-        if: needs.eks.result == 'success'
+      - name: Get latest release tag
+        id: latest
         run: |
-          cat > .github/badges/eks.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "EKS",
-            "message": "${{ needs.prepare.outputs.version }} validated",
-            "color": "brightgreen",
-            "namedLogo": "amazonaws"
-          }
-          EOF
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "tag=${LATEST}" >> $GITHUB_OUTPUT
 
-      - name: Update EKS badge (failed)
-        if: needs.eks.result == 'failure'
+      - name: Append EKS result to validation log
+        if: needs.eks.result == 'success' || needs.eks.result == 'failure'
         run: |
-          cat > .github/badges/eks.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "EKS",
-            "message": "${{ needs.prepare.outputs.version }} failed",
-            "color": "red",
-            "namedLogo": "amazonaws"
-          }
-          EOF
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "eks" \
+            --arg result "${{ needs.eks.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
 
-      - name: Update AKS badge
-        if: needs.aks.result == 'success'
+      - name: Append AKS result to validation log
+        if: needs.aks.result == 'success' || needs.aks.result == 'failure'
         run: |
-          cat > .github/badges/aks.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "AKS",
-            "message": "${{ needs.prepare.outputs.version }} validated",
-            "color": "brightgreen",
-            "namedLogo": "microsoftazure"
-          }
-          EOF
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "aks" \
+            --arg result "${{ needs.aks.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
 
-      - name: Update AKS badge (failed)
-        if: needs.aks.result == 'failure'
+      - name: Append GKE result to validation log
+        if: needs.gke.result == 'success' || needs.gke.result == 'failure'
         run: |
-          cat > .github/badges/aks.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "AKS",
-            "message": "${{ needs.prepare.outputs.version }} failed",
-            "color": "red",
-            "namedLogo": "microsoftazure"
-          }
-          EOF
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "gke" \
+            --arg result "${{ needs.gke.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
 
-      - name: Update GKE badge
-        if: needs.gke.result == 'success'
+      - name: Regenerate badges from validation log
         run: |
-          cat > .github/badges/gke.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "GKE",
-            "message": "${{ needs.prepare.outputs.version }} validated",
-            "color": "brightgreen",
-            "namedLogo": "googlecloud"
-          }
-          EOF
+          LATEST_TAG="${{ steps.latest.outputs.tag }}"
 
-      - name: Update GKE badge (failed)
-        if: needs.gke.result == 'failure'
-        run: |
-          cat > .github/badges/gke.json << EOF
-          {
-            "schemaVersion": 1,
-            "label": "GKE",
-            "message": "${{ needs.prepare.outputs.version }} failed",
-            "color": "red",
-            "namedLogo": "googlecloud"
-          }
-          EOF
+          for provider in eks aks gke; do
+            # Find most recent validation for this provider
+            ENTRY=$(jq -r ".validations | map(select(.provider == \"$provider\")) | sort_by(.timestamp) | last" .github/cloud-validation.json)
+
+            if [ "$ENTRY" = "null" ]; then
+              # No validation history
+              MESSAGE="untested"
+              COLOR="lightgrey"
+            else
+              VALIDATED_VERSION=$(echo "$ENTRY" | jq -r '.version')
+              RESULT=$(echo "$ENTRY" | jq -r '.result')
+
+              if [ "$RESULT" = "pass" ]; then
+                if [ "$VALIDATED_VERSION" = "$LATEST_TAG" ]; then
+                  MESSAGE="$VALIDATED_VERSION ✓"
+                  COLOR="brightgreen"
+                else
+                  MESSAGE="$VALIDATED_VERSION ✓ (not latest)"
+                  COLOR="yellow"
+                fi
+              else
+                MESSAGE="$VALIDATED_VERSION ✗"
+                COLOR="red"
+              fi
+            fi
+
+            # Get logo based on provider
+            case $provider in
+              eks) LOGO="amazonaws" ;;
+              aks) LOGO="microsoftazure" ;;
+              gke) LOGO="googlecloud" ;;
+            esac
+
+            # Write badge JSON (with proper formatting)
+            jq -n \
+              --arg label "$(echo $provider | tr '[:lower:]' '[:upper:]')" \
+              --arg message "$MESSAGE" \
+              --arg color "$COLOR" \
+              --arg logo "$LOGO" \
+              '{
+                schemaVersion: 1,
+                label: $label,
+                message: $message,
+                color: $color,
+                namedLogo: $logo
+              }' > .github/badges/$provider.json
+          done
 
       - name: Check for changes
         id: changes
         run: |
-          git diff --quiet .github/badges/ || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --quiet .github/cloud-validation.json .github/badges/ || echo "changed=true" >> $GITHUB_OUTPUT
 
-      - name: Commit badge updates
+      - name: Commit validation log and badge updates
         if: steps.changes.outputs.changed == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/badges/*.json
-          git commit -m "chore: update cloud validation badges for ${{ needs.prepare.outputs.version }}
+          git config user.name "obsyk-bot[bot]"
+          git config user.email "obsyk-bot[bot]@users.noreply.github.com"
+          git add .github/cloud-validation.json .github/badges/*.json
+          git commit -m "chore: update cloud validation log for ${{ needs.prepare.outputs.version }}
 
-          Providers tested:
+          Test run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Results:
           - EKS: ${{ needs.eks.result }}
           - AKS: ${{ needs.aks.result }}
           - GKE: ${{ needs.gke.result }}"

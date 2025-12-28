@@ -17,13 +17,11 @@ The Obsyk Operator Helm chart is available on [Artifact Hub](https://artifacthub
 
 ### Kubernetes Versions
 
-Tested during each release via Kind cluster matrix:
+Tested during each release via Kind cluster matrix. All test results are logged with clickable run links.
 
 | Release | K8s 1.28 | K8s 1.30 | K8s 1.32 |
 |---------|:--------:|:--------:|:--------:|
 | v0.2.0  |    -     |    -     |    -     |
-
-_Compatibility matrix is updated with each release._
 
 ### Cloud Providers
 
@@ -35,7 +33,9 @@ Validated on-demand via manual testing:
 | ![AKS](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/obsyk/obsyk-operator/main/.github/badges/aks.json) | Azure Kubernetes Service |
 | ![GKE](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/obsyk/obsyk-operator/main/.github/badges/gke.json) | Google Kubernetes Engine |
 
-The operator is designed to work on any conformant Kubernetes cluster. Cloud badges update when validation tests are run.
+The operator is designed to work on any conformant Kubernetes cluster.
+
+📋 **[View full validation history](.github/cloud-validation.json)** - Each entry includes a link to the actual GitHub Actions run for verification.
 
 ## Prerequisites
 
