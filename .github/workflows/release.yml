@@ -13,9 +13,148 @@ env:
   IMAGE_NAME: obsyk/obsyk-operator
 
 jobs:
+  # Pre-release validation: Test on multiple Kubernetes versions
+  k8s-matrix:
+    name: Test K8s ${{ matrix.k8s-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true  # Stop all if one fails - don't release if any version fails
+      matrix:
+        k8s-version: ["1.28", "1.30", "1.32"]
+        include:
+          - k8s-version: "1.28"
+            kind-image: "kindest/node:v1.28.15"
+          - k8s-version: "1.30"
+            kind-image: "kindest/node:v1.30.8"
+          - k8s-version: "1.32"
+            kind-image: "kindest/node:v1.32.2"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          node_image: ${{ matrix.kind-image }}
+          cluster_name: obsyk-k8s-${{ matrix.k8s-version }}
+
+      - name: Build operator image
+        run: make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test
+
+      - name: Load image into Kind
+        run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test --name obsyk-k8s-${{ matrix.k8s-version }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install operator
+        run: |
+          helm install obsyk-operator ./charts/obsyk-operator \
+            --namespace obsyk-system \
+            --create-namespace \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=test \
+            --set image.pullPolicy=Never \
+            --set agent.enabled=false
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=120s
+
+      - name: Verify operator is running
+        run: |
+          echo "=== Operator Pod Status ==="
+          kubectl get pods -n obsyk-system
+          echo ""
+          echo "=== Operator Logs ==="
+          kubectl logs -n obsyk-system deployment/obsyk-operator --tail=20
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name obsyk-k8s-${{ matrix.k8s-version }}
+
+  # Pre-release validation: Test with Pod Security Standards (Restricted)
+  # This approximates OpenShift/ROSA Security Context Constraints
+  pss-restricted:
+    name: Test PSS Restricted
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: obsyk-pss
+
+      - name: Build operator image
+        run: make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test
+
+      - name: Load image into Kind
+        run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test --name obsyk-pss
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Create namespace with PSS restricted enforcement
+        run: |
+          kubectl create namespace obsyk-system
+          kubectl label namespace obsyk-system \
+            pod-security.kubernetes.io/enforce=restricted \
+            pod-security.kubernetes.io/enforce-version=latest \
+            pod-security.kubernetes.io/warn=restricted \
+            pod-security.kubernetes.io/warn-version=latest
+
+      - name: Install operator under PSS restricted
+        run: |
+          helm install obsyk-operator ./charts/obsyk-operator \
+            --namespace obsyk-system \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=test \
+            --set image.pullPolicy=Never \
+            --set agent.enabled=false
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=120s
+
+      - name: Verify operator runs under PSS restricted
+        run: |
+          echo "=== PSS Restricted Test Passed ==="
+          echo "Operator successfully runs with Pod Security Standards: restricted"
+          echo "This validates compatibility with OpenShift/ROSA Security Context Constraints"
+          kubectl get pods -n obsyk-system
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name obsyk-pss
+
   release:
     name: Release
     runs-on: ubuntu-latest
+    needs: [k8s-matrix, pss-restricted]  # Only release if all K8s versions and PSS tests pass
     permissions:
       contents: write
       packages: write
