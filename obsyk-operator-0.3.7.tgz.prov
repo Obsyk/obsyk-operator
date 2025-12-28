@@ -1,0 +1,91 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+annotations:
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/changes: |
+    - kind: added
+      description: Values schema for Artifact Hub
+    - kind: added
+      description: Helm chart GPG signing
+    - kind: added
+      description: Verified Publisher badge support
+    - kind: added
+      description: CRD documentation
+  artifacthub.io/crds: |
+    - kind: ObsykAgent
+      version: v1
+      name: obsykagent
+      displayName: Obsyk Agent
+      description: Configures the Obsyk agent for cluster monitoring
+  artifacthub.io/crdsExamples: |
+    - apiVersion: obsyk.io/v1
+      kind: ObsykAgent
+      metadata:
+        name: obsyk-agent
+        namespace: obsyk-system
+      spec:
+        clusterName: "my-cluster"
+        platformURL: "https://app.obsyk.ai"
+        credentialsSecretRef:
+          name: obsyk-credentials
+  artifacthub.io/images: |
+    - name: obsyk-operator
+      image: ghcr.io/obsyk/obsyk-operator
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Website
+      url: https://obsyk.ai
+    - name: Documentation
+      url: https://docs.obsyk.ai
+    - name: Support
+      url: https://obsyk.ai/support
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Basic Install
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/signKey: |
+    fingerprint: 3B07B70EDB4F179351A2F22C61622AA0ECF09226
+    url: https://obsyk.ai/pgp-key.asc
+apiVersion: v2
+appVersion: v0.3.7
+description: Kubernetes operator that connects your cluster to the Obsyk observability
+  platform
+home: https://obsyk.ai
+icon: https://raw.githubusercontent.com/Obsyk/obsyk-operator/main/charts/obsyk-operator/logo.png
+keywords:
+- - observability
+- - kubernetes
+- - operator
+- - monitoring
+- - visibility
+- - security
+kubeVersion: '>=1.26.0-0'
+maintainers:
+- - email: support@obsyk.ai
+  name: Obsyk
+  url: https://obsyk.ai
+name: obsyk-operator
+sources:
+- - https://github.com/Obsyk/obsyk-operator
+type: application
+version: 0.3.7
+
+...
+files:
+  obsyk-operator-0.3.7.tgz: sha256:e87acfde455856be0fd728ab2cd87fda3b695cd5c833d4c58697657061fbd2e9
+-----BEGIN PGP SIGNATURE-----
+
+wsFcBAEBCgAQBQJpUamCCRBhYiqg7PCSJgAAmN0QABUFywAUwwCqxXJx9ForpdM3
+HLdxsSGx0k7jJsRC6YZPfKNZD3uXOkS6E91z2MFT+oh28Jg4aOC55rhNv0RyBMjO
+G3NlVt45ffXeT4fcIsXhKH0EkkCp/QZ/mB8zsqsg+2nFMIKp+7fxtg+0tyZCpcWI
+TVsDakwU04j2MOttHVCMXqk9gFAdSxCaTcNB6sk6Ru9B0ljKdvpaiECv5syfPJCK
+RDGxwyegrcNrEiE309pQSqrXi+CvvKz+tfXFYSyr3UB2qP7XIqk/EyraHy6h/YAn
+A0U+Cd0u2nBTz0JhadMt97x5MpcGqiIPGTguegqaqnOkbP6OU8zqnMX5vzRPuiqd
+Mboc9o7Yg6tytk3+wdrLNOYbWtHjCJTP6asogFCBvlh9e6hP6Wo5CioLaDtgDy1Z
+0vtdGRBpPhuq+tQXSYojIwucFHRVmS0SSG91u2I9RKpeaeWzMwwN0CWgCoMkdWYA
+7UpF6MDG0pP174Pur269JPLULJNTts+oNXC1VVaqE8B6+BgUSIBO7w2sTYYfz4y5
+c3HtMxQZrk6qlFm7TP3pS46WTCrS27WQYaJx8fWk/w/rlqzHCd1ZUQHQVPN31Q7X
+NMqzoUxAGtwErrcpEofXf2TH6n/WLWsZYmJaOP9Qw7ILqoOb3ZwW8aTs2SAw9uBx
+xvh55UpEfTbOlp+t1UfK
+=Ppif
+-----END PGP SIGNATURE-----

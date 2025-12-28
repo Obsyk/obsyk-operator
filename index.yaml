@@ -47,8 +47,80 @@ entries:
         fingerprint: 3B07B70EDB4F179351A2F22C61622AA0ECF09226
         url: https://obsyk.ai/pgp-key.asc
     apiVersion: v2
+    appVersion: v0.3.7
+    created: "2025-12-28T22:04:50.083080325Z"
+    description: Kubernetes operator that connects your cluster to the Obsyk observability
+      platform
+    digest: e87acfde455856be0fd728ab2cd87fda3b695cd5c833d4c58697657061fbd2e9
+    home: https://obsyk.ai
+    icon: https://raw.githubusercontent.com/Obsyk/obsyk-operator/main/charts/obsyk-operator/logo.png
+    keywords:
+    - observability
+    - kubernetes
+    - operator
+    - monitoring
+    - visibility
+    - security
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: support@obsyk.ai
+      name: Obsyk
+      url: https://obsyk.ai
+    name: obsyk-operator
+    sources:
+    - https://github.com/Obsyk/obsyk-operator
+    type: application
+    urls:
+    - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.3.7.tgz
+    version: 0.3.7
+  - annotations:
+      artifacthub.io/category: monitoring-logging
+      artifacthub.io/changes: |
+        - kind: added
+          description: Values schema for Artifact Hub
+        - kind: added
+          description: Helm chart GPG signing
+        - kind: added
+          description: Verified Publisher badge support
+        - kind: added
+          description: CRD documentation
+      artifacthub.io/crds: |
+        - kind: ObsykAgent
+          version: v1
+          name: obsykagent
+          displayName: Obsyk Agent
+          description: Configures the Obsyk agent for cluster monitoring
+      artifacthub.io/crdsExamples: |
+        - apiVersion: obsyk.io/v1
+          kind: ObsykAgent
+          metadata:
+            name: obsyk-agent
+            namespace: obsyk-system
+          spec:
+            clusterName: "my-cluster"
+            platformURL: "https://app.obsyk.ai"
+            credentialsSecretRef:
+              name: obsyk-credentials
+      artifacthub.io/images: |
+        - name: obsyk-operator
+          image: ghcr.io/obsyk/obsyk-operator
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Website
+          url: https://obsyk.ai
+        - name: Documentation
+          url: https://docs.obsyk.ai
+        - name: Support
+          url: https://obsyk.ai/support
+      artifacthub.io/operator: "true"
+      artifacthub.io/operatorCapabilities: Basic Install
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/signKey: |
+        fingerprint: 3B07B70EDB4F179351A2F22C61622AA0ECF09226
+        url: https://obsyk.ai/pgp-key.asc
+    apiVersion: v2
     appVersion: v0.3.6
-    created: "2025-12-21T03:47:29.474609701Z"
+    created: "2025-12-28T22:04:50.081665966Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: fd2e8ef7007fa8b2f299e2c73738941e0e7251cbf6127183e62d66146e42abff
@@ -88,7 +160,7 @@ entries:
       artifacthub.io/prerelease: "false"
     apiVersion: v2
     appVersion: v0.3.5
-    created: "2025-12-21T03:47:29.473072414Z"
+    created: "2025-12-28T22:04:50.080227333Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 62e7b6d598131590f78c5900844b5651139b67634fde01dfdd9b949977104cb0
@@ -128,7 +200,7 @@ entries:
       artifacthub.io/prerelease: "false"
     apiVersion: v2
     appVersion: v0.3.4
-    created: "2025-12-21T03:47:29.470912707Z"
+    created: "2025-12-28T22:04:50.078737794Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1713ef62d9a07117c987c8e06e2d4f294e0daaae6788215cfd701096704c1b9e
@@ -155,7 +227,7 @@ entries:
     version: 0.3.4
   - apiVersion: v2
     appVersion: v0.3.3
-    created: "2025-12-21T03:47:29.470339368Z"
+    created: "2025-12-28T22:04:50.077382978Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: c272009a158c66ba5763d2077f2a318d81604450dedc2c06f4f7b47394ee6f6d
@@ -179,7 +251,7 @@ entries:
     version: 0.3.3
   - apiVersion: v2
     appVersion: v0.3.2
-    created: "2025-12-21T03:47:29.469850256Z"
+    created: "2025-12-28T22:04:50.076876834Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 632be3e6f9b852aba81daa6c54c239888135d9649d2af47f8369f76275404cd5
@@ -203,7 +275,7 @@ entries:
     version: 0.3.2
   - apiVersion: v2
     appVersion: v0.3.1
-    created: "2025-12-21T03:47:29.469323925Z"
+    created: "2025-12-28T22:04:50.076365129Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 41ecc8b8b0b067b7add04ae8fc78e872d25cde52951d6bbfb7960da0a12b90e1
@@ -227,7 +299,7 @@ entries:
     version: 0.3.1
   - apiVersion: v2
     appVersion: v0.3.0
-    created: "2025-12-21T03:47:29.468831747Z"
+    created: "2025-12-28T22:04:50.075862942Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: f072050dea6ff2c8a4444b51bf0adc1601df3e60746f8d9f704dfa8276953193
@@ -251,7 +323,7 @@ entries:
     version: 0.3.0
   - apiVersion: v2
     appVersion: v0.2.1
-    created: "2025-12-21T03:47:29.468313982Z"
+    created: "2025-12-28T22:04:50.075312946Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1ca12351c4422ee5ed238214ddb139ec7f727977ecd5011af2511b14c1ed5957
@@ -275,7 +347,7 @@ entries:
     version: 0.2.1
   - apiVersion: v2
     appVersion: v0.2.0
-    created: "2025-12-21T03:47:29.467805914Z"
+    created: "2025-12-28T22:04:50.074787336Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: 1c790832c8f9df4eb146e23905b97cee24b17bb8ad8974476cc36e05c25fe039
@@ -299,7 +371,7 @@ entries:
     version: 0.2.0
   - apiVersion: v2
     appVersion: 0.1.0
-    created: "2025-12-21T03:47:29.467234589Z"
+    created: "2025-12-28T22:04:50.074238782Z"
     description: Kubernetes operator that connects your cluster to the Obsyk observability
       platform
     digest: eef9066c297c3cd9708a749a1fe86e4d2f2939bc50b334362ec692ce33fa6dbc
@@ -321,4 +393,4 @@ entries:
     urls:
     - https://obsyk.github.io/obsyk-operator/obsyk-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2025-12-21T03:47:29.466628248Z"
+generated: "2025-12-28T22:04:50.07362644Z"
