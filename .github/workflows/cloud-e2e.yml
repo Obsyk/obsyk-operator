@@ -1,0 +1,640 @@
+# Copyright (c) Obsyk. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+
+name: Cloud E2E
+
+# Manual trigger only - run when you want to validate on real cloud providers
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Cloud provider to test'
+        required: true
+        type: choice
+        options:
+          - eks
+          - aks
+          - gke
+          - all
+      release_version:
+        description: 'Release version to validate (e.g., v0.2.0). Leave empty for latest.'
+        required: false
+        default: ''
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: obsyk/obsyk-operator
+
+jobs:
+  # Determine the version to test
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.release_version }}" ]; then
+            VERSION="${{ inputs.release_version }}"
+          else
+            # Get latest tag
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "latest")
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Testing version: ${VERSION}"
+
+  # EKS E2E Test
+  eks:
+    name: EKS E2E
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: inputs.provider == 'eks' || inputs.provider == 'all'
+    env:
+      CLUSTER_NAME: obsyk-e2e-${{ github.run_id }}
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install eksctl
+        run: |
+          curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/eksctl /usr/local/bin
+
+      - name: Create EKS cluster
+        run: |
+          echo "Creating EKS cluster: $CLUSTER_NAME"
+          eksctl create cluster \
+            --name $CLUSTER_NAME \
+            --version 1.30 \
+            --region $AWS_REGION \
+            --nodegroup-name standard-workers \
+            --node-type t3.medium \
+            --nodes 2 \
+            --nodes-min 1 \
+            --nodes-max 3 \
+            --managed
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repo
+        run: |
+          helm repo add obsyk https://obsyk.github.io/obsyk-operator
+          helm repo update
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
+      - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          HELM_VERSION="${VERSION#v}"  # Remove 'v' prefix for Helm
+          if [ "$VERSION" = "latest" ]; then
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          else
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --version $HELM_VERSION \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          fi
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=300s
+
+      - name: Run comprehensive validation
+        run: |
+          echo "=== 1. Deployment Validation ==="
+          kubectl get pods -n obsyk-system
+          RESTARTS=$(kubectl get pods -n obsyk-system -l app.kubernetes.io/name=obsyk-operator -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
+          echo "Restarts: $RESTARTS"
+          [ "$RESTARTS" -eq "0" ] || (echo "ERROR: Pod has restarted" && exit 1)
+
+          echo ""
+          echo "=== 2. RBAC Validation ==="
+          for resource in pods services namespaces nodes deployments statefulsets daemonsets jobs cronjobs ingresses networkpolicies configmaps secrets persistentvolumeclaims serviceaccounts events roles clusterroles rolebindings clusterrolebindings; do
+            if kubectl auth can-i list $resource --as=system:serviceaccount:obsyk-system:obsyk-operator-controller-manager 2>/dev/null | grep -q "yes"; then
+              echo "  $resource: OK"
+            else
+              echo "  $resource: FAILED" && exit 1
+            fi
+          done
+
+          echo ""
+          echo "=== 3. Wait for Initial Sync ==="
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 10
+          done
+          [ -n "$SYNC_TIME" ] || (echo "ERROR: Sync timeout" && exit 1)
+
+          echo ""
+          echo "=== 4. Resource Count Validation ==="
+          kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts}' | jq .
+
+          echo ""
+          echo "=== 5. Platform Connectivity ==="
+          kubectl logs -n obsyk-system deployment/obsyk-operator --tail=50 | grep -E "(snapshot|heartbeat|sync)" | tail -10
+
+          echo ""
+          echo "=== 6. EKS-Specific Validation ==="
+          # Verify no AWS credential errors
+          if kubectl logs -n obsyk-system deployment/obsyk-operator | grep -i "aws\|credentials\|iam" | grep -i error; then
+            echo "ERROR: AWS credential errors detected"
+            exit 1
+          fi
+          echo "No AWS credential errors detected"
+
+          echo ""
+          echo "=== EKS E2E Test PASSED ==="
+
+      - name: Cleanup EKS cluster
+        if: always()
+        run: |
+          eksctl delete cluster --name $CLUSTER_NAME --region $AWS_REGION --wait || true
+
+  # AKS E2E Test
+  aks:
+    name: AKS E2E
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: inputs.provider == 'aks' || inputs.provider == 'all'
+    env:
+      CLUSTER_NAME: obsyk-e2e-${{ github.run_id }}
+      RESOURCE_GROUP: obsyk-e2e-${{ github.run_id }}
+      AZURE_REGION: eastus
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create resource group
+        run: |
+          az group create --name $RESOURCE_GROUP --location $AZURE_REGION
+
+      - name: Create AKS cluster
+        run: |
+          echo "Creating AKS cluster: $CLUSTER_NAME"
+          az aks create \
+            --resource-group $RESOURCE_GROUP \
+            --name $CLUSTER_NAME \
+            --node-count 2 \
+            --node-vm-size Standard_B2s \
+            --generate-ssh-keys \
+            --no-wait
+
+          # Wait for cluster to be ready
+          az aks wait --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME --created --timeout 1800
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME --overwrite-existing
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repo
+        run: |
+          helm repo add obsyk https://obsyk.github.io/obsyk-operator
+          helm repo update
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
+      - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          HELM_VERSION="${VERSION#v}"
+          if [ "$VERSION" = "latest" ]; then
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          else
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --version $HELM_VERSION \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          fi
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=300s
+
+      - name: Run comprehensive validation
+        run: |
+          echo "=== 1. Deployment Validation ==="
+          kubectl get pods -n obsyk-system
+          RESTARTS=$(kubectl get pods -n obsyk-system -l app.kubernetes.io/name=obsyk-operator -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
+          echo "Restarts: $RESTARTS"
+          [ "$RESTARTS" -eq "0" ] || (echo "ERROR: Pod has restarted" && exit 1)
+
+          echo ""
+          echo "=== 2. Wait for Initial Sync ==="
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 10
+          done
+          [ -n "$SYNC_TIME" ] || (echo "ERROR: Sync timeout" && exit 1)
+
+          echo ""
+          echo "=== 3. Resource Count Validation ==="
+          kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts}' | jq .
+
+          echo ""
+          echo "=== 4. AKS-Specific Validation ==="
+          # Verify no Azure credential errors
+          if kubectl logs -n obsyk-system deployment/obsyk-operator | grep -i "azure\|aad\|identity" | grep -i error; then
+            echo "ERROR: Azure credential errors detected"
+            exit 1
+          fi
+          echo "No Azure credential errors detected"
+
+          echo ""
+          echo "=== AKS E2E Test PASSED ==="
+
+      - name: Cleanup AKS cluster
+        if: always()
+        run: |
+          az group delete --name $RESOURCE_GROUP --yes --no-wait || true
+
+  # GKE E2E Test
+  gke:
+    name: GKE E2E
+    runs-on: ubuntu-latest
+    needs: prepare
+    if: inputs.provider == 'gke' || inputs.provider == 'all'
+    env:
+      CLUSTER_NAME: obsyk-e2e-${{ github.run_id }}
+      GCP_REGION: us-central1
+      GCP_ZONE: us-central1-a
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          gcloud components install gke-gcloud-auth-plugin
+
+      - name: Create GKE cluster
+        run: |
+          echo "Creating GKE cluster: $CLUSTER_NAME"
+          gcloud container clusters create $CLUSTER_NAME \
+            --zone $GCP_ZONE \
+            --num-nodes 2 \
+            --machine-type e2-small \
+            --disk-size 20
+
+      - name: Get GKE credentials
+        run: |
+          gcloud container clusters get-credentials $CLUSTER_NAME --zone $GCP_ZONE
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Add Helm repo
+        run: |
+          helm repo add obsyk https://obsyk.github.io/obsyk-operator
+          helm repo update
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
+      - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          HELM_VERSION="${VERSION#v}"
+          if [ "$VERSION" = "latest" ]; then
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          else
+            helm install obsyk-operator obsyk/obsyk-operator \
+              --namespace obsyk-system \
+              --version $HELM_VERSION \
+              --set agent.clusterName=$E2E_CLUSTER_NAME \
+              --set agent.platformURL=$E2E_PLATFORM_URL
+          fi
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=300s
+
+      - name: Run comprehensive validation
+        run: |
+          echo "=== 1. Deployment Validation ==="
+          kubectl get pods -n obsyk-system
+          RESTARTS=$(kubectl get pods -n obsyk-system -l app.kubernetes.io/name=obsyk-operator -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}')
+          echo "Restarts: $RESTARTS"
+          [ "$RESTARTS" -eq "0" ] || (echo "ERROR: Pod has restarted" && exit 1)
+
+          echo ""
+          echo "=== 2. Wait for Initial Sync ==="
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 10
+          done
+          [ -n "$SYNC_TIME" ] || (echo "ERROR: Sync timeout" && exit 1)
+
+          echo ""
+          echo "=== 3. Resource Count Validation ==="
+          kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts}' | jq .
+
+          echo ""
+          echo "=== 4. GKE-Specific Validation ==="
+          # Verify no GCP credential errors
+          if kubectl logs -n obsyk-system deployment/obsyk-operator | grep -i "gcp\|google\|workload.identity" | grep -i error; then
+            echo "ERROR: GCP credential errors detected"
+            exit 1
+          fi
+          echo "No GCP credential errors detected"
+
+          echo ""
+          echo "=== GKE E2E Test PASSED ==="
+
+      - name: Cleanup GKE cluster
+        if: always()
+        run: |
+          gcloud container clusters delete $CLUSTER_NAME --zone $GCP_ZONE --quiet || true
+
+  # Update validation log and regenerate badges
+  update-validation-log:
+    name: Update Validation Log
+    runs-on: ubuntu-latest
+    needs: [prepare, eks, aks, gke]
+    if: always()
+    permissions:
+      contents: write
+
+    steps:
+      # Use GitHub App token for pushing to main branch
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Get latest release tag
+        id: latest
+        run: |
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "tag=${LATEST}" >> $GITHUB_OUTPUT
+
+      - name: Append EKS result to validation log
+        if: needs.eks.result == 'success' || needs.eks.result == 'failure'
+        run: |
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "eks" \
+            --arg result "${{ needs.eks.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
+
+      - name: Append AKS result to validation log
+        if: needs.aks.result == 'success' || needs.aks.result == 'failure'
+        run: |
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "aks" \
+            --arg result "${{ needs.aks.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
+
+      - name: Append GKE result to validation log
+        if: needs.gke.result == 'success' || needs.gke.result == 'failure'
+        run: |
+          NEW_ENTRY=$(jq -n \
+            --arg type "cloud-provider" \
+            --arg version "${{ needs.prepare.outputs.version }}" \
+            --arg provider "gke" \
+            --arg result "${{ needs.gke.result == 'success' && 'pass' || 'fail' }}" \
+            --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg k8s_version "1.30" \
+            '{
+              type: $type,
+              version: $version,
+              provider: $provider,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url,
+              k8s_version: $k8s_version
+            }')
+          jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
+
+      - name: Regenerate badges from validation log
+        run: |
+          LATEST_TAG="${{ steps.latest.outputs.tag }}"
+
+          for provider in eks aks gke; do
+            # Find most recent validation for this provider
+            ENTRY=$(jq -r ".validations | map(select(.provider == \"$provider\")) | sort_by(.timestamp) | last" .github/cloud-validation.json)
+
+            if [ "$ENTRY" = "null" ]; then
+              # No validation history
+              MESSAGE="untested"
+              COLOR="lightgrey"
+            else
+              VALIDATED_VERSION=$(echo "$ENTRY" | jq -r '.version')
+              RESULT=$(echo "$ENTRY" | jq -r '.result')
+
+              if [ "$RESULT" = "pass" ]; then
+                if [ "$VALIDATED_VERSION" = "$LATEST_TAG" ]; then
+                  MESSAGE="$VALIDATED_VERSION ✓"
+                  COLOR="brightgreen"
+                else
+                  MESSAGE="$VALIDATED_VERSION ✓ (not latest)"
+                  COLOR="yellow"
+                fi
+              else
+                MESSAGE="$VALIDATED_VERSION ✗"
+                COLOR="red"
+              fi
+            fi
+
+            # Get logo based on provider
+            case $provider in
+              eks) LOGO="amazonaws" ;;
+              aks) LOGO="microsoftazure" ;;
+              gke) LOGO="googlecloud" ;;
+            esac
+
+            # Write badge JSON (with proper formatting)
+            jq -n \
+              --arg label "$(echo $provider | tr '[:lower:]' '[:upper:]')" \
+              --arg message "$MESSAGE" \
+              --arg color "$COLOR" \
+              --arg logo "$LOGO" \
+              '{
+                schemaVersion: 1,
+                label: $label,
+                message: $message,
+                color: $color,
+                namedLogo: $logo
+              }' > .github/badges/$provider.json
+          done
+
+      - name: Check for changes
+        id: changes
+        run: |
+          git diff --quiet .github/cloud-validation.json .github/badges/ || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit validation log and badge updates
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "obsyk-bot[bot]"
+          git config user.email "obsyk-bot[bot]@users.noreply.github.com"
+          git add .github/cloud-validation.json .github/badges/*.json
+          git commit -m "chore: update cloud validation log for ${{ needs.prepare.outputs.version }}
+
+          Test run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          Results:
+          - EKS: ${{ needs.eks.result }}
+          - AKS: ${{ needs.aks.result }}
+          - GKE: ${{ needs.gke.result }}"
+          git push

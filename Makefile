@@ -122,6 +122,74 @@ golangci-lint: ## Download golangci-lint locally if necessary
 	@test -s $(GOLANGCI_LINT) || \
 		GOBIN=$(GOBIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
+##@ Multi-Cloud Testing
+
+# Kind node images for K8s version matrix
+KIND_IMAGE_1_28 ?= kindest/node:v1.28.15
+KIND_IMAGE_1_30 ?= kindest/node:v1.30.8
+KIND_IMAGE_1_32 ?= kindest/node:v1.32.2
+
+.PHONY: e2e-kind-matrix
+e2e-kind-matrix: ## Run E2E on K8s 1.28, 1.30, 1.32 (local testing)
+	@echo "=== Running E2E tests on multiple Kubernetes versions ==="
+	@for version in 1.28.15 1.30.8 1.32.2; do \
+		echo ""; \
+		echo "=== Testing K8s v$$version ==="; \
+		kind create cluster --name obsyk-$$version --image kindest/node:v$$version || exit 1; \
+		$(MAKE) docker-build IMG=obsyk-operator:e2e; \
+		kind load docker-image obsyk-operator:e2e --name obsyk-$$version; \
+		helm install obsyk-operator ./charts/obsyk-operator -n obsyk-system --create-namespace \
+			--set image.repository=obsyk-operator --set image.tag=e2e --set image.pullPolicy=Never \
+			--set agent.enabled=false || (kind delete cluster --name obsyk-$$version && exit 1); \
+		kubectl wait --for=condition=Available deployment/obsyk-operator -n obsyk-system --timeout=120s || \
+			(kubectl logs -n obsyk-system deployment/obsyk-operator --tail=50; kind delete cluster --name obsyk-$$version; exit 1); \
+		echo "K8s v$$version: PASSED"; \
+		kind delete cluster --name obsyk-$$version; \
+	done
+	@echo ""
+	@echo "=== All Kubernetes versions passed ==="
+
+.PHONY: e2e-pss
+e2e-pss: ## Test with PSS restricted (validates OpenShift/ROSA compatibility)
+	@echo "=== Testing with Pod Security Standards: restricted ==="
+	-kind delete cluster --name obsyk-pss 2>/dev/null
+	kind create cluster --name obsyk-pss
+	kubectl create namespace obsyk-system
+	kubectl label namespace obsyk-system \
+		pod-security.kubernetes.io/enforce=restricted \
+		pod-security.kubernetes.io/enforce-version=latest \
+		pod-security.kubernetes.io/warn=restricted \
+		pod-security.kubernetes.io/warn-version=latest
+	$(MAKE) docker-build IMG=obsyk-operator:e2e
+	kind load docker-image obsyk-operator:e2e --name obsyk-pss
+	helm install obsyk-operator ./charts/obsyk-operator -n obsyk-system \
+		--set image.repository=obsyk-operator --set image.tag=e2e --set image.pullPolicy=Never \
+		--set agent.enabled=false || (kind delete cluster --name obsyk-pss && exit 1)
+	kubectl wait --for=condition=Available deployment/obsyk-operator -n obsyk-system --timeout=120s || \
+		(kubectl logs -n obsyk-system deployment/obsyk-operator --tail=50; kind delete cluster --name obsyk-pss; exit 1)
+	@echo ""
+	@echo "=== PSS Restricted test PASSED ==="
+	@echo "Operator runs successfully with Pod Security Standards: restricted"
+	@echo "This validates compatibility with OpenShift/ROSA Security Context Constraints"
+	kind delete cluster --name obsyk-pss
+
+.PHONY: e2e-kind
+e2e-kind: ## Run basic E2E test on local Kind cluster
+	@echo "=== Running basic E2E test ==="
+	-kind delete cluster --name obsyk-e2e 2>/dev/null
+	kind create cluster --name obsyk-e2e
+	$(MAKE) docker-build IMG=obsyk-operator:e2e
+	kind load docker-image obsyk-operator:e2e --name obsyk-e2e
+	helm install obsyk-operator ./charts/obsyk-operator -n obsyk-system --create-namespace \
+		--set image.repository=obsyk-operator --set image.tag=e2e --set image.pullPolicy=Never \
+		--set agent.enabled=false || (kind delete cluster --name obsyk-e2e && exit 1)
+	kubectl wait --for=condition=Available deployment/obsyk-operator -n obsyk-system --timeout=120s || \
+		(kubectl logs -n obsyk-system deployment/obsyk-operator --tail=50; kind delete cluster --name obsyk-e2e; exit 1)
+	@echo ""
+	@echo "=== E2E test PASSED ==="
+	kubectl get pods -n obsyk-system
+	kind delete cluster --name obsyk-e2e
+
 ##@ Help
 
 .PHONY: help

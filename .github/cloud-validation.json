@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "description": "Validation history for obsyk-operator. Each entry includes a run_url for verification.",
+  "validations": []
+}

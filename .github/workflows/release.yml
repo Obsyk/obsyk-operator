@@ -13,9 +13,329 @@ env:
   IMAGE_NAME: obsyk/obsyk-operator
 
 jobs:
+  # Pre-release validation: Test on multiple Kubernetes versions
+  k8s-matrix:
+    name: Test K8s ${{ matrix.k8s-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true  # Stop all if one fails - don't release if any version fails
+      matrix:
+        k8s-version: ["1.28", "1.30", "1.32"]
+        include:
+          - k8s-version: "1.28"
+            kind-image: "kindest/node:v1.28.15"
+          - k8s-version: "1.30"
+            kind-image: "kindest/node:v1.30.8"
+          - k8s-version: "1.32"
+            kind-image: "kindest/node:v1.32.2"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          node_image: ${{ matrix.kind-image }}
+          cluster_name: obsyk-k8s-${{ matrix.k8s-version }}
+
+      - name: Build operator image
+        run: make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test
+
+      - name: Load image into Kind
+        run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test --name obsyk-k8s-${{ matrix.k8s-version }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
+      - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+        run: |
+          helm install obsyk-operator ./charts/obsyk-operator \
+            --namespace obsyk-system \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=test \
+            --set image.pullPolicy=Never \
+            --set agent.enabled=true \
+            --set agent.clusterName=$E2E_CLUSTER_NAME \
+            --set agent.platformURL=$E2E_PLATFORM_URL
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=120s
+
+      - name: Wait for initial sync
+        run: |
+          echo "Waiting for ObsykAgent to complete initial sync..."
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 5
+          done
+          if [ -z "$SYNC_TIME" ]; then
+            echo "ERROR: Sync timeout - ObsykAgent did not complete initial sync"
+            kubectl get obsykagent -n obsyk-system -o yaml
+            kubectl logs -n obsyk-system deployment/obsyk-operator --tail=100
+            exit 1
+          fi
+
+      - name: Verify ObsykAgent status
+        run: |
+          echo "=== ObsykAgent Status ==="
+          kubectl get obsykagent -n obsyk-system -o yaml
+          echo ""
+          echo "=== Checking conditions ==="
+          AVAILABLE=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.conditions[?(@.type=="Available")].status}')
+          if [ "$AVAILABLE" != "True" ]; then
+            echo "ERROR: ObsykAgent Available condition is not True"
+            exit 1
+          fi
+          echo "ObsykAgent is Available"
+          echo ""
+          echo "=== Resource Counts ==="
+          kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts}' | jq .
+          echo ""
+          echo "=== Operator Pod Status ==="
+          kubectl get pods -n obsyk-system
+          echo ""
+          echo "=== Operator Logs (last 20 lines) ==="
+          kubectl logs -n obsyk-system deployment/obsyk-operator --tail=20
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name obsyk-k8s-${{ matrix.k8s-version }}
+
+  # Pre-release validation: Test with Pod Security Standards (Restricted)
+  # This approximates OpenShift/ROSA Security Context Constraints
+  pss-restricted:
+    name: Test PSS Restricted
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Create Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: obsyk-pss
+
+      - name: Build operator image
+        run: make docker-build IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test
+
+      - name: Load image into Kind
+        run: kind load docker-image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test --name obsyk-pss
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Create namespace with PSS restricted enforcement
+        run: |
+          kubectl create namespace obsyk-system
+          kubectl label namespace obsyk-system \
+            pod-security.kubernetes.io/enforce=restricted \
+            pod-security.kubernetes.io/enforce-version=latest \
+            pod-security.kubernetes.io/warn=restricted \
+            pod-security.kubernetes.io/warn-version=latest
+
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
+      - name: Install operator under PSS restricted
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
+        run: |
+          helm install obsyk-operator ./charts/obsyk-operator \
+            --namespace obsyk-system \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=test \
+            --set image.pullPolicy=Never \
+            --set agent.enabled=true \
+            --set agent.clusterName=$E2E_CLUSTER_NAME \
+            --set agent.platformURL=$E2E_PLATFORM_URL
+
+      - name: Wait for operator to be ready
+        run: |
+          kubectl wait --for=condition=Available deployment/obsyk-operator \
+            --namespace obsyk-system \
+            --timeout=120s
+
+      - name: Wait for initial sync
+        run: |
+          echo "Waiting for ObsykAgent to complete initial sync..."
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 5
+          done
+          if [ -z "$SYNC_TIME" ]; then
+            echo "ERROR: Sync timeout - ObsykAgent did not complete initial sync"
+            kubectl get obsykagent -n obsyk-system -o yaml
+            kubectl logs -n obsyk-system deployment/obsyk-operator --tail=100
+            exit 1
+          fi
+
+      - name: Verify operator runs under PSS restricted
+        run: |
+          echo "=== PSS Restricted Test Passed ==="
+          echo "Operator successfully runs with Pod Security Standards: restricted"
+          echo "This validates compatibility with OpenShift/ROSA Security Context Constraints"
+          echo ""
+          echo "=== ObsykAgent Status ==="
+          kubectl get obsykagent -n obsyk-system -o yaml
+          echo ""
+          echo "=== Operator Pod Status ==="
+          kubectl get pods -n obsyk-system
+
+      - name: Cleanup
+        if: always()
+        run: kind delete cluster --name obsyk-pss
+
+  # Log K8s matrix test results to validation history
+  log-k8s-results:
+    name: Log K8s Matrix Results
+    runs-on: ubuntu-latest
+    needs: [k8s-matrix, pss-restricted]
+    if: always()
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Append K8s matrix results to validation log
+        run: |
+          VERSION="${{ github.ref_name }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RESULT="${{ needs.k8s-matrix.result == 'success' && 'pass' || 'fail' }}"
+
+          # Add entry for each K8s version
+          for k8s_version in 1.28 1.30 1.32; do
+            NEW_ENTRY=$(jq -n \
+              --arg type "k8s-version" \
+              --arg version "$VERSION" \
+              --arg k8s_version "$k8s_version" \
+              --arg result "$RESULT" \
+              --arg timestamp "$TIMESTAMP" \
+              --arg run_id "${{ github.run_id }}" \
+              --arg run_url "$RUN_URL" \
+              '{
+                type: $type,
+                version: $version,
+                k8s_version: $k8s_version,
+                result: $result,
+                timestamp: $timestamp,
+                run_id: $run_id,
+                run_url: $run_url
+              }')
+
+            jq ".validations += [$NEW_ENTRY]" .github/cloud-validation.json > tmp.json
+            mv tmp.json .github/cloud-validation.json
+          done
+
+          # Also add PSS restricted result
+          PSS_RESULT="${{ needs.pss-restricted.result == 'success' && 'pass' || 'fail' }}"
+          PSS_ENTRY=$(jq -n \
+            --arg type "pss-restricted" \
+            --arg version "$VERSION" \
+            --arg result "$PSS_RESULT" \
+            --arg timestamp "$TIMESTAMP" \
+            --arg run_id "${{ github.run_id }}" \
+            --arg run_url "$RUN_URL" \
+            '{
+              type: $type,
+              version: $version,
+              result: $result,
+              timestamp: $timestamp,
+              run_id: $run_id,
+              run_url: $run_url
+            }')
+
+          jq ".validations += [$PSS_ENTRY]" .github/cloud-validation.json > tmp.json
+          mv tmp.json .github/cloud-validation.json
+
+      - name: Commit validation log
+        run: |
+          git config user.name "obsyk-bot[bot]"
+          git config user.email "obsyk-bot[bot]@users.noreply.github.com"
+          git add .github/cloud-validation.json
+          git diff --staged --quiet || git commit -m "chore: log K8s matrix results for ${{ github.ref_name }}
+
+          K8s versions tested: 1.28, 1.30, 1.32
+          K8s matrix result: ${{ needs.k8s-matrix.result }}
+          PSS restricted result: ${{ needs.pss-restricted.result }}
+          Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          git push || echo "Nothing to push"
+
   release:
     name: Release
     runs-on: ubuntu-latest
+    needs: [k8s-matrix, pss-restricted]  # Only release if all K8s versions and PSS tests pass
     permissions:
       contents: write
       packages: write
