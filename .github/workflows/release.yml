@@ -56,15 +56,32 @@ jobs:
         with:
           version: v3.14.0
 
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create namespace obsyk-system
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
       - name: Install operator
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
         run: |
           helm install obsyk-operator ./charts/obsyk-operator \
             --namespace obsyk-system \
-            --create-namespace \
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
             --set image.tag=test \
             --set image.pullPolicy=Never \
-            --set agent.enabled=false
+            --set agent.enabled=true \
+            --set agent.clusterName=$E2E_CLUSTER_NAME \
+            --set agent.platformURL=$E2E_PLATFORM_URL
 
       - name: Wait for operator to be ready
         run: |
@@ -72,12 +89,45 @@ jobs:
             --namespace obsyk-system \
             --timeout=120s
 
-      - name: Verify operator is running
+      - name: Wait for initial sync
         run: |
+          echo "Waiting for ObsykAgent to complete initial sync..."
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 5
+          done
+          if [ -z "$SYNC_TIME" ]; then
+            echo "ERROR: Sync timeout - ObsykAgent did not complete initial sync"
+            kubectl get obsykagent -n obsyk-system -o yaml
+            kubectl logs -n obsyk-system deployment/obsyk-operator --tail=100
+            exit 1
+          fi
+
+      - name: Verify ObsykAgent status
+        run: |
+          echo "=== ObsykAgent Status ==="
+          kubectl get obsykagent -n obsyk-system -o yaml
+          echo ""
+          echo "=== Checking conditions ==="
+          AVAILABLE=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.conditions[?(@.type=="Available")].status}')
+          if [ "$AVAILABLE" != "True" ]; then
+            echo "ERROR: ObsykAgent Available condition is not True"
+            exit 1
+          fi
+          echo "ObsykAgent is Available"
+          echo ""
+          echo "=== Resource Counts ==="
+          kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.resourceCounts}' | jq .
+          echo ""
           echo "=== Operator Pod Status ==="
           kubectl get pods -n obsyk-system
           echo ""
-          echo "=== Operator Logs ==="
+          echo "=== Operator Logs (last 20 lines) ==="
           kubectl logs -n obsyk-system deployment/obsyk-operator --tail=20
 
       - name: Cleanup
@@ -125,14 +175,31 @@ jobs:
             pod-security.kubernetes.io/warn=restricted \
             pod-security.kubernetes.io/warn-version=latest
 
+      - name: Create credentials secret
+        env:
+          E2E_CLIENT_ID: ${{ secrets.E2E_CLIENT_ID }}
+          E2E_PRIVATE_KEY: ${{ secrets.E2E_PRIVATE_KEY }}
+        run: |
+          echo "$E2E_PRIVATE_KEY" | base64 -d > /tmp/private.pem
+          kubectl create secret generic obsyk-credentials \
+            --namespace obsyk-system \
+            --from-file=private_key=/tmp/private.pem \
+            --from-literal=client_id=$E2E_CLIENT_ID
+          rm /tmp/private.pem
+
       - name: Install operator under PSS restricted
+        env:
+          E2E_PLATFORM_URL: ${{ secrets.E2E_PLATFORM_URL }}
+          E2E_CLUSTER_NAME: ${{ secrets.E2E_CLUSTER_NAME }}
         run: |
           helm install obsyk-operator ./charts/obsyk-operator \
             --namespace obsyk-system \
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
             --set image.tag=test \
             --set image.pullPolicy=Never \
-            --set agent.enabled=false
+            --set agent.enabled=true \
+            --set agent.clusterName=$E2E_CLUSTER_NAME \
+            --set agent.platformURL=$E2E_PLATFORM_URL
 
       - name: Wait for operator to be ready
         run: |
@@ -140,11 +207,35 @@ jobs:
             --namespace obsyk-system \
             --timeout=120s
 
+      - name: Wait for initial sync
+        run: |
+          echo "Waiting for ObsykAgent to complete initial sync..."
+          for i in {1..30}; do
+            SYNC_TIME=$(kubectl get obsykagent -n obsyk-system -o jsonpath='{.items[0].status.lastSyncTime}' 2>/dev/null || echo "")
+            if [ -n "$SYNC_TIME" ]; then
+              echo "Sync completed at: $SYNC_TIME"
+              break
+            fi
+            echo "Waiting for sync... ($i/30)"
+            sleep 5
+          done
+          if [ -z "$SYNC_TIME" ]; then
+            echo "ERROR: Sync timeout - ObsykAgent did not complete initial sync"
+            kubectl get obsykagent -n obsyk-system -o yaml
+            kubectl logs -n obsyk-system deployment/obsyk-operator --tail=100
+            exit 1
+          fi
+
       - name: Verify operator runs under PSS restricted
         run: |
           echo "=== PSS Restricted Test Passed ==="
           echo "Operator successfully runs with Pod Security Standards: restricted"
           echo "This validates compatibility with OpenShift/ROSA Security Context Constraints"
+          echo ""
+          echo "=== ObsykAgent Status ==="
+          kubectl get obsykagent -n obsyk-system -o yaml
+          echo ""
+          echo "=== Operator Pod Status ==="
           kubectl get pods -n obsyk-system
 
       - name: Cleanup
