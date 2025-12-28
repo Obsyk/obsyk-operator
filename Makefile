@@ -127,12 +127,12 @@ golangci-lint: ## Download golangci-lint locally if necessary
 # Kind node images for K8s version matrix
 KIND_IMAGE_1_28 ?= kindest/node:v1.28.15
 KIND_IMAGE_1_30 ?= kindest/node:v1.30.8
-KIND_IMAGE_1_32 ?= kindest/node:v1.32.2
+KIND_IMAGE_1_32 ?= kindest/node:v1.32.0
 
 .PHONY: e2e-kind-matrix
 e2e-kind-matrix: ## Run E2E on K8s 1.28, 1.30, 1.32 (local testing)
 	@echo "=== Running E2E tests on multiple Kubernetes versions ==="
-	@for version in 1.28.15 1.30.8 1.32.2; do \
+	@for version in 1.28.15 1.30.8 1.32.0; do \
 		echo ""; \
 		echo "=== Testing K8s v$$version ==="; \
 		kind create cluster --name obsyk-$$version --image kindest/node:v$$version || exit 1; \

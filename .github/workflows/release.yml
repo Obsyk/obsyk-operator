@@ -27,7 +27,7 @@ jobs:
           - k8s-version: "1.30"
             kind-image: "kindest/node:v1.30.8"
           - k8s-version: "1.32"
-            kind-image: "kindest/node:v1.32.2"
+            kind-image: "kindest/node:v1.32.0"
 
     steps:
       - name: Checkout
