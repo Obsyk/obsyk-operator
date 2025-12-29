@@ -150,8 +150,8 @@ jobs:
           echo ""
           echo "=== 2. RBAC Validation ==="
           # Verify ClusterRole exists with required permissions (impersonation not available in cloud providers)
-          kubectl get clusterrole obsyk-operator-manager-role -o yaml | grep -q "pods" && echo "  ClusterRole has pod permissions: OK" || (echo "  ClusterRole missing pod permissions: FAILED" && exit 1)
-          kubectl get clusterrolebinding obsyk-operator-manager-rolebinding -o yaml | grep -q "obsyk-operator-controller-manager" && echo "  ClusterRoleBinding exists: OK" || (echo "  ClusterRoleBinding missing: FAILED" && exit 1)
+          kubectl get clusterrole obsyk-operator -o yaml | grep -q "pods" && echo "  ClusterRole has pod permissions: OK" || (echo "  ClusterRole missing pod permissions: FAILED" && exit 1)
+          kubectl get clusterrolebinding obsyk-operator -o yaml | grep -q "obsyk-operator" && echo "  ClusterRoleBinding exists: OK" || (echo "  ClusterRoleBinding missing: FAILED" && exit 1)
 
           echo ""
           echo "=== 3. Wait for Initial Sync ==="
