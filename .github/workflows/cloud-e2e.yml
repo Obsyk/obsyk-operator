@@ -58,7 +58,7 @@ jobs:
     if: inputs.provider == 'eks' || inputs.provider == 'all'
     env:
       CLUSTER_NAME: obsyk-e2e-${{ github.run_id }}
-      AWS_REGION: us-east-1
+      AWS_REGION: us-east-2
 
     steps:
       - name: Checkout
