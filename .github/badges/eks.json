@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "label": "EKS",
-  "message": "untested",
-  "color": "lightgrey",
+  "message": "v0.3.7 ✗",
+  "color": "red",
   "namedLogo": "amazonaws"
 }

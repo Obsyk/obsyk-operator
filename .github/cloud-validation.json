@@ -36,6 +36,16 @@
       "timestamp": "2025-12-28T22:17:15Z",
       "run_id": "20560274978",
       "run_url": "https://github.com/Obsyk/obsyk-operator/actions/runs/20560274978"
+    },
+    {
+      "type": "cloud-provider",
+      "version": "v0.3.7",
+      "provider": "eks",
+      "result": "fail",
+      "timestamp": "2025-12-29T04:55:20Z",
+      "run_id": "20565175413",
+      "run_url": "https://github.com/Obsyk/obsyk-operator/actions/runs/20565175413",
+      "k8s_version": "1.30"
     }
   ]
 }
