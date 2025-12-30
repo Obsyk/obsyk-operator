@@ -96,6 +96,16 @@
       "run_id": "20586045308",
       "run_url": "https://github.com/Obsyk/obsyk-operator/actions/runs/20586045308",
       "k8s_version": "1.30"
+    },
+    {
+      "type": "cloud-provider",
+      "version": "v0.3.7",
+      "provider": "gke",
+      "result": "pass",
+      "timestamp": "2025-12-30T01:25:40Z",
+      "run_id": "20586418788",
+      "run_url": "https://github.com/Obsyk/obsyk-operator/actions/runs/20586418788",
+      "k8s_version": "1.30"
     }
   ]
 }
