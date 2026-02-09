@@ -4,7 +4,7 @@
 # Build stage
 # Pinned to manifest list digest for supply chain security (supports all platforms)
 # To update: docker buildx imagetools inspect golang:1.25-alpine
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine@sha256:d9b2e14101f27ec8d09674cd01186798d227bb0daec90e032aeb1cd22ac0f029 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine@sha256:f6751d823c26342f9506c03797d2527668d095b0a15f1862cddb4d927a7a4ced AS builder
 
 # These are automatically set by docker buildx
 ARG TARGETOS
